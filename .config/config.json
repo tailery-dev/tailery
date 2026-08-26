@@ -1,0 +1,113 @@
+{
+  "version": "1.0.0",
+  "settings": {
+    "active_profile": "default",
+    "docker_socket": null,
+    "sync_clients": [
+      "cursor",
+      "claude_code",
+      "zed",
+      "antigravity"
+    ],
+    "filter_managed_containers_only": true
+  },
+  "servers": {
+    "memory-service": {
+      "type": "remote",
+      "url": "http://localhost:8080/mcp",
+      "transport": "streamable-http",
+      "headers": {
+        "Authorization": "Bearer ${keychain:memory-auth-token}"
+      },
+      "env": {},
+      "tool_filter": {
+        "allow": [],
+        "deny": [],
+        "auto_approve": []
+      },
+      "shim_port": null
+    },
+    "github-context": {
+      "type": "local",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${keychain:github-pat}"
+      },
+      "tool_filter": {
+        "allow": [],
+        "deny": [],
+        "auto_approve": []
+      },
+      "container": {
+        "auto_start": false,
+        "image": "",
+        "read_only_rootfs": true,
+        "mounts": [],
+        "ports": [],
+        "network": "none",
+        "resources": null
+      },
+      "transport": {
+        "transport": "stdio"
+      }
+    },
+    "filesystem-sandbox": {
+      "type": "local",
+      "command": "mcp/filesystem:latest",
+      "args": [],
+      "env": {},
+      "tool_filter": {
+        "allow": [
+          "read_file",
+          "list_directory"
+        ],
+        "deny": [
+          "write_file",
+          "delete_file"
+        ],
+        "auto_approve": []
+      },
+      "container": {
+        "auto_start": false,
+        "image": "mcp/filesystem:latest",
+        "read_only_rootfs": true,
+        "mounts": [
+          {
+            "host": "/Users/vlad.fratila/code",
+            "guest": "/workspace",
+            "read_only": true
+          }
+        ],
+        "ports": [],
+        "network": "none",
+        "resources": {
+          "memory_mb": 512,
+          "cpus": 1.0
+        }
+      },
+      "transport": {
+        "transport": "stdio"
+      }
+    }
+  },
+  "profiles": {
+    "default": {
+      "enabled_servers": [
+        "filesystem-sandbox",
+        "github-context",
+        "memory-service"
+      ],
+      "enabled_clients": [
+        "cursor",
+        "claude_code",
+        "zed",
+        "antigravity"
+      ]
+    }
+  },
+  "workspaces": {}
+}
