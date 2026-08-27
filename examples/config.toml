@@ -1,0 +1,21 @@
+# Example Tailery Configuration File
+# 
+# Place this file in `~/.config/tailery/config.toml` or load it directly.
+
+[servers.my_local_server]
+command = "node"
+args = ["/path/to/mcp/server/build/index.js"]
+env = { "API_KEY" = "your_api_key_here" }
+
+[servers.docker_example]
+command = "docker"
+args = ["run", "-i", "--rm", "mcp/my-docker-server"]
+
+[skills.general]
+enabled = true
+description = "General coding assistant skills"
+
+[skills.rust_helper]
+enabled = true
+description = "Rust specific skills and MCP endpoints"
+servers = ["my_local_server"]

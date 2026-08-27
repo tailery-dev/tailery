@@ -1,0 +1,24 @@
+# top-most EditorConfig file
+root = true
+
+# All files
+[*]
+indent_style = space
+indent_size = 4
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+indent_size = 2
+
+# YAML and JSON
+[*.{yml,yaml,json,toml}]
+indent_size = 2
+
+# Rust
+[*.rs]
+indent_size = 4

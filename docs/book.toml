@@ -1,0 +1,10 @@
+[book]
+authors = ["Tailery Contributors"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Tailery Documentation"
+
+[output.html]
+git-repository-url = "https://github.com/tailery-dev/tailery"
+git-repository-icon = "fa-github"

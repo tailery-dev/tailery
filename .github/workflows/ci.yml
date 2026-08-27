@@ -1,4 +1,4 @@
-name: CI # Continuous Integration
+name: CI
 
 on:
   push:
@@ -17,8 +17,10 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: extractions/setup-just@v2
       - name: Run tests
-        run: cargo test --locked --all-features --workspace
+        run: just test --locked --all-features --workspace
 
   rustfmt:
     name: Rustfmt
@@ -31,8 +33,10 @@ jobs:
         with:
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: extractions/setup-just@v2
       - name: Check formatting
-        run: cargo fmt --all --check
+        run: just fmt --all
 
   clippy:
     name: Clippy
@@ -45,8 +49,10 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: extractions/setup-just@v2
       - name: Clippy check
-        run: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        run: just clippy --all-features --workspace
 
   docs:
     name: Docs
@@ -57,7 +63,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
+      - name: Install just
+        uses: extractions/setup-just@v2
       - name: Check documentation
-        env:
-          RUSTDOCFLAGS: -D warnings
-        run: cargo doc --no-deps --document-private-items --all-features --workspace --examples
+        run: just doc
