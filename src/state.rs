@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManagedServer {
+    pub name: String,
+    pub config: ServerConfig,
+    pub is_global: bool,
+    pub in_repo_paths: Vec<PathBuf>,
+    pub client_global_project_paths: Vec<PathBuf>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppState {
     pub version: String,
@@ -23,6 +32,10 @@ pub struct AppState {
     pub container_logs: Vec<String>,
     #[serde(skip)]
     pub inspector_events: Vec<crate::shim::TelemetryMessage>,
+    
+    // In-memory merged view of all discovered MCPs (Global + Project)
+    #[serde(skip)]
+    pub managed_servers: HashMap<String, ManagedServer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -60,6 +73,7 @@ impl Default for AppState {
             containers: Vec::new(),
             container_logs: Vec::new(),
             inspector_events: Vec::new(),
+            managed_servers: HashMap::new(),
         }
     }
 }
