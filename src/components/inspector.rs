@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 use serde_json::Value;
 
@@ -15,9 +15,7 @@ use crate::shim::TelemetryMessage;
 use crate::state::AppState;
 use crate::tui::Event;
 
-#[derive(Debug, Clone)]
-
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct InspectorEvent {
     pub timestamp: String,
     pub server: String,
@@ -154,7 +152,11 @@ impl StatefulWidget for &Inspector {
             .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(area);
 
-        let events: Vec<InspectorEvent> = state.inspector_events.iter().map(InspectorEvent::from_telemetry).collect();
+        let events: Vec<InspectorEvent> = state
+            .inspector_events
+            .iter()
+            .map(InspectorEvent::from_telemetry)
+            .collect();
 
         // 1. Left Table: Live Event Feed
         let rows: Vec<Row> = events

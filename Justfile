@@ -10,7 +10,7 @@ manifest_dir := `if [ -f Cargo.toml ]; then echo "."; elif [ -f tailery/Cargo.to
 manifest_path := manifest_dir + "/Cargo.toml"
 cargo_target_dir := manifest_dir + "/target"
 
-version := `sed -n -E 's/^version = "([^"]+)"/\1/p' ` + manifest_path + ` | head -n 1`
+version := `[ -f Cargo.toml ] && sed -n -E 's/^version = "([^"]+)"/\1/p' Cargo.toml | head -n 1 || sed -n -E 's/^version = "([^"]+)"/\1/p' tailery/Cargo.toml | head -n 1`
 
 host_os := os()
 host_arch := arch()

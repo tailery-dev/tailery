@@ -13,14 +13,12 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     action::Action,
     components::Component,
-    state::{ContainerConfig, PortMapping, ServerConfig, ToolFilter},
     state::AppState,
+    state::{ContainerConfig, PortMapping, ServerConfig, ToolFilter},
     tui::Event,
 };
 
-#[derive(Debug, Clone)]
-
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct PromptStep {
     pub question: String,
     pub hint: Option<String>,
@@ -38,7 +36,6 @@ pub struct AnsweredStep {
 // New Profile Wizard
 // -----------------------------------------------------------------------------
 
-
 #[derive(Debug, Clone)]
 pub struct NewProfileResult {
     pub name: String,
@@ -52,10 +49,7 @@ pub struct NewProfileResult {
 pub fn parse_client_selection(input: &str) -> Vec<String> {
     let trimmed = input.trim().to_lowercase();
     if trimmed.is_empty() || trimmed == "all" || trimmed == "*" {
-        return vec![
-            "zed".to_string(),
-            "antigravity".to_string(),
-        ];
+        return vec!["zed".to_string(), "antigravity".to_string()];
     }
     if trimmed == "none" || trimmed == "0" {
         return Vec::new();
@@ -131,10 +125,7 @@ impl NewProfileWizard {
                 question: "Select enabled AI / IDE clients".to_string(),
                 hint: Some("e.g. 1,2 or zed,agy or all (default: all)".to_string()),
                 default_value: Some("all".to_string()),
-                options: vec![
-                    "1) Zed".to_string(),
-                    "2) Google Antigravity".to_string(),
-                ],
+                options: vec!["1) Zed".to_string(), "2) Google Antigravity".to_string()],
             },
             2 => PromptStep {
                 question: format!("Copy active servers from '{}'?", self.active_profile_name),
@@ -224,7 +215,12 @@ impl NewProfileWizard {
             let enabled_clients = parse_client_selection(&self.history[1].answer);
             let copy_servers = self.history[2].answer.to_lowercase().starts_with('y');
             let import_clients = self.history[3].answer.to_lowercase().starts_with('y');
-            let search_paths = self.history[4].answer.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let search_paths = self.history[4]
+                .answer
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
             let activate_now = self.history[5].answer.to_lowercase().starts_with('y');
             Some(NewProfileResult {
                 name,
@@ -284,9 +280,7 @@ pub fn parse_port_mappings(input: &str) -> Vec<PortMapping> {
     ports
 }
 
-#[derive(Debug, Clone)]
-
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NewServerWizard {
     pub current_step: usize,
     pub history: Vec<AnsweredStep>,
@@ -891,7 +885,6 @@ pub enum WizardType {
     Server(NewServerWizard),
 }
 
-
 #[derive(Default)]
 pub struct Wizard {
     pub wizard_type: WizardType,
@@ -1081,6 +1074,11 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         ])
         .split(popup_layout[1])[1]
 }
+impl Default for WizardType {
+    fn default() -> Self {
+        WizardType::Profile(crate::components::wizard::NewProfileWizard::default())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -1108,7 +1106,7 @@ mod tests {
 
         // Step 3: Import configs (default 'y')
         assert!(wizard.submit().is_none());
-        
+
         // Step 4: Auto discover paths (type "/code")
         wizard.handle_char('/');
         wizard.handle_char('c');
@@ -1131,27 +1129,13 @@ mod tests {
 
     #[test]
     fn test_parse_client_selection_options() {
-        assert_eq!(
-            parse_client_selection("all"),
-            vec!["zed", "antigravity"]
-        );
-        assert_eq!(
-            parse_client_selection(""),
-            vec!["zed", "antigravity"]
-        );
-        assert_eq!(
-            parse_client_selection("1, 2"),
-            vec!["zed", "antigravity"]
-        );
+        assert_eq!(parse_client_selection("all"), vec!["zed", "antigravity"]);
+        assert_eq!(parse_client_selection(""), vec!["zed", "antigravity"]);
+        assert_eq!(parse_client_selection("1, 2"), vec!["zed", "antigravity"]);
         assert_eq!(
             parse_client_selection("agy,zed"),
             vec!["antigravity", "zed"]
         );
         assert!(parse_client_selection("none").is_empty());
-    }
-}
-impl Default for WizardType {
-    fn default() -> Self {
-        WizardType::Profile(crate::components::wizard::NewProfileWizard::default())
     }
 }

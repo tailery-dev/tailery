@@ -32,7 +32,7 @@ pub struct AppState {
     pub container_logs: Vec<String>,
     #[serde(skip)]
     pub inspector_events: Vec<crate::shim::TelemetryMessage>,
-    
+
     // In-memory merged view of all discovered MCPs (Global + Project)
     #[serde(skip)]
     pub managed_servers: HashMap<String, ManagedServer>,
@@ -80,7 +80,9 @@ impl Default for AppState {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "transport", rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum LocalTransport {
+    #[default]
     Stdio,
     StreamableHttp {
         port: u16,
@@ -95,12 +97,6 @@ pub enum LocalTransport {
         port: u16,
         path: String,
     },
-}
-
-impl Default for LocalTransport {
-    fn default() -> Self {
-        Self::Stdio
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -444,25 +440,25 @@ pub fn project_dirs() -> Option<ProjectDirs> {
 /// 2. `XDG_CONFIG_HOME/tailery`
 /// 3. Default XDG fallback: `~/.config/tailery` or `.`
 pub fn get_config_dir() -> PathBuf {
-    if let Ok(val) = std::env::var("TAILERY_CONFIG_DIR") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim());
-        }
+    if let Ok(val) = std::env::var("TAILERY_CONFIG_DIR")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim());
     }
-    if let Ok(val) = std::env::var("TAILERY_CONFIG") {
-        if !val.trim().is_empty() {
-            let p = PathBuf::from(val.trim());
-            return if p.is_file() || p.extension().is_some() {
-                p.parent().unwrap_or(&p).to_path_buf()
-            } else {
-                p
-            };
-        }
+    if let Ok(val) = std::env::var("TAILERY_CONFIG")
+        && !val.trim().is_empty()
+    {
+        let p = PathBuf::from(val.trim());
+        return if p.is_file() || p.extension().is_some() {
+            p.parent().unwrap_or(&p).to_path_buf()
+        } else {
+            p
+        };
     }
-    if let Ok(val) = std::env::var("XDG_CONFIG_HOME") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim()).join("tailery");
-        }
+    if let Ok(val) = std::env::var("XDG_CONFIG_HOME")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim()).join("tailery");
     }
     if let Some(home) = dirs::home_dir() {
         home.join(".config").join("tailery")
@@ -492,20 +488,20 @@ pub fn get_config_path() -> PathBuf {
 /// 3. Default XDG fallback: `~/.local/share/tailery` or `.tailery_data`
 #[allow(dead_code)]
 pub fn get_data_dir() -> PathBuf {
-    if let Ok(val) = std::env::var("TAILERY_DATA_DIR") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim());
-        }
+    if let Ok(val) = std::env::var("TAILERY_DATA_DIR")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim());
     }
-    if let Ok(val) = std::env::var("TAILERY_DATA") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim());
-        }
+    if let Ok(val) = std::env::var("TAILERY_DATA")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim());
     }
-    if let Ok(val) = std::env::var("XDG_DATA_HOME") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim()).join("tailery");
-        }
+    if let Ok(val) = std::env::var("XDG_DATA_HOME")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim()).join("tailery");
     }
     if let Some(home) = dirs::home_dir() {
         home.join(".local").join("share").join("tailery")
@@ -522,20 +518,20 @@ pub fn get_data_dir() -> PathBuf {
 /// 3. Default XDG fallback: `~/.cache/tailery` or `.cache`
 #[allow(dead_code)]
 pub fn get_cache_dir() -> PathBuf {
-    if let Ok(val) = std::env::var("TAILERY_CACHE_DIR") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim());
-        }
+    if let Ok(val) = std::env::var("TAILERY_CACHE_DIR")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim());
     }
-    if let Ok(val) = std::env::var("TAILERY_CACHE") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim());
-        }
+    if let Ok(val) = std::env::var("TAILERY_CACHE")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim());
     }
-    if let Ok(val) = std::env::var("XDG_CACHE_HOME") {
-        if !val.trim().is_empty() {
-            return PathBuf::from(val.trim()).join("tailery");
-        }
+    if let Ok(val) = std::env::var("XDG_CACHE_HOME")
+        && !val.trim().is_empty()
+    {
+        return PathBuf::from(val.trim()).join("tailery");
     }
     if let Some(home) = dirs::home_dir() {
         home.join(".cache").join("tailery")
@@ -577,14 +573,10 @@ pub fn save_config_to_path(config: &AppState, path: &Path) -> std::io::Result<()
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let json = serde_json::to_string_pretty(config)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let json = serde_json::to_string_pretty(config).map_err(std::io::Error::other)?;
     std::fs::write(path, json)?;
     Ok(())
 }
-
-
-
 
 impl Default for ServerConfig {
     fn default() -> Self {
@@ -665,4 +657,3 @@ mod tests {
         }
     }
 }
-

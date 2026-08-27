@@ -196,11 +196,7 @@ impl ClientAdapter for CursorAdapter {
         Ok(result)
     }
 
-    fn extract_managed_config(
-        &self,
-        _path: &Path,
-        content_json: &Value,
-    ) -> Value {
+    fn extract_managed_config(&self, _path: &Path, content_json: &Value) -> Value {
         let mut managed = serde_json::Map::new();
         let servers = content_json
             .get("mcpServers")
@@ -223,7 +219,9 @@ impl ClientAdapter for CursorAdapter {
         };
 
         if let Some(root_map) = root.as_object_mut() {
-            let mut target_servers = if let Some(existing_servers) = root_map.get("mcpServers").and_then(|v| v.as_object()) {
+            let mut target_servers = if let Some(existing_servers) =
+                root_map.get("mcpServers").and_then(|v| v.as_object())
+            {
                 existing_servers.clone()
             } else {
                 serde_json::Map::new()
@@ -236,7 +234,12 @@ impl ClientAdapter for CursorAdapter {
                 } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
                     if cmd == "docker" {
                         if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
-                            args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                            args.iter().any(|arg| {
+                                arg.as_str().is_some_and(|s| {
+                                    s.contains("dev.tailery.managed=true")
+                                        || s.contains("dev.tailery.server=")
+                                })
+                            })
                         } else {
                             false
                         }
@@ -284,13 +287,17 @@ impl ClientAdapter for CursorAdapter {
         for (name, cfg) in servers {
             let status = super::classify_mcp_status(&name, &cfg, state);
             let transport_label = match &cfg {
-                ServerConfig::Local { transport, command, .. } => {
+                ServerConfig::Local {
+                    transport, command, ..
+                } => {
                     if command.as_deref() == Some("docker") {
                         "docker".to_string()
                     } else {
                         match transport {
                             crate::state::LocalTransport::Stdio => "stdio".to_string(),
-                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => {
+                                "streamable-http".to_string()
+                            }
                             crate::state::LocalTransport::Http { .. } => "http".to_string(),
                             crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
                         }
@@ -320,7 +327,8 @@ impl ClientAdapter for CursorAdapter {
         managed_servers: &HashMap<String, crate::state::ManagedServer>,
     ) -> Result<usize, AdapterError> {
         let mut global_servers = HashMap::new();
-        let mut project_servers_by_path: HashMap<PathBuf, HashMap<String, ServerConfig>> = HashMap::new();
+        let mut project_servers_by_path: HashMap<PathBuf, HashMap<String, ServerConfig>> =
+            HashMap::new();
         let mut synced_count = 0;
 
         for (name, srv) in managed_servers {
@@ -366,7 +374,7 @@ mod tests {
 
     #[test]
     fn test_cursor_generate_config() {
-        let adapter = CursorAdapter::default();
+        let adapter = CursorAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "test-server".to_string(),
@@ -396,7 +404,7 @@ mod tests {
 
     #[test]
     fn test_cursor_generate_config_custom_container() {
-        let adapter = CursorAdapter::default();
+        let adapter = CursorAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "sandboxed-db".to_string(),
@@ -442,7 +450,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_cursor_read_write_roundtrip() {
-        let adapter = CursorAdapter::default();
+        let adapter = CursorAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -482,7 +490,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_cursor_preserves_unmanaged_keys_and_diff_extract() {
-        let adapter = CursorAdapter::default();
+        let adapter = CursorAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

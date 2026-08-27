@@ -11,7 +11,6 @@ use crate::action::Action;
 use crate::components::Component;
 use crate::tui::Event;
 
-
 #[derive(Default)]
 pub struct SkillPreview {
     pub name: &'static str,
@@ -71,7 +70,10 @@ pub struct Skills {
 }
 
 impl Component for Skills {
-    fn register_action_handler(&mut self, _tx: tokio::sync::mpsc::UnboundedSender<Action>) -> color_eyre::Result<()> {
+    fn register_action_handler(
+        &mut self,
+        _tx: tokio::sync::mpsc::UnboundedSender<Action>,
+    ) -> color_eyre::Result<()> {
         Ok(())
     }
 
@@ -100,26 +102,41 @@ impl Widget for &Skills {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(6),
-                Constraint::Min(10),
-            ])
+            .constraints([Constraint::Length(6), Constraint::Min(10)])
             .split(area);
 
         let banner_lines = vec![
             Line::from(vec![
-                Span::styled(" AGENT SKILLS CONTROL PLANE ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-                Span::styled("── Next-Generation Autonomous Agent Harnessing", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    " AGENT SKILLS CONTROL PLANE ",
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "── Next-Generation Autonomous Agent Harnessing",
+                    Style::default().fg(Color::DarkGray),
+                ),
             ]),
+            Line::from(vec![Span::styled(
+                "Skills extend AI coding assistants with specialized instructions, scripts, prompt-injection harnesses, and tool workflows.",
+                Style::default().fg(Color::White),
+            )]),
+            Line::from(vec![Span::styled(
+                "Tailery provides decentralized skill discovery, zero-friction sync to Claude / Cursor / Zed, and sandboxed execution.",
+                Style::default().fg(Color::DarkGray),
+            )]),
             Line::from(vec![
-                Span::styled("Skills extend AI coding assistants with specialized instructions, scripts, prompt-injection harnesses, and tool workflows.", Style::default().fg(Color::White)),
-            ]),
-            Line::from(vec![
-                Span::styled("Tailery provides decentralized skill discovery, zero-friction sync to Claude / Cursor / Zed, and sandboxed execution.", Style::default().fg(Color::DarkGray)),
-            ]),
-            Line::from(vec![
-                Span::styled("Status: ", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)),
-                Span::styled("Phase 2 Core Capability (In Development)", Style::default().fg(Color::Green)),
+                Span::styled(
+                    "Status: ",
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    "Phase 2 Core Capability (In Development)",
+                    Style::default().fg(Color::Green),
+                ),
             ]),
         ];
 

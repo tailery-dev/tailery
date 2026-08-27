@@ -153,43 +153,42 @@ pub fn start_docker_poller(
                 }
             }
 
-            if daemon_online {
-                if let Some(ref d) = docker {
-                    if let Ok(live_containers) = d.list_containers_summary().await {
-                        for live in live_containers {
-                            let clean_live_name = live.name.trim_start_matches('/');
-                            if let Some(pos) = all_list
-                                .iter()
-                                .position(|c| c.name == live.name || c.name == clean_live_name)
-                            {
-                                all_list[pos].id = live.id.clone();
-                                all_list[pos].running = live.running;
-                                all_list[pos].state = live.state.clone();
-                                all_list[pos].status = live.status.clone();
-                                all_list[pos].is_managed = true;
-                                if !live.ports.is_empty() {
-                                    all_list[pos].ports = live.ports;
-                                }
-                                if !live.labels.is_empty() {
-                                    all_list[pos].labels = live.labels;
-                                }
-                                all_list[pos].daemon_online = true;
-                                all_list[pos].error = None;
-                            } else {
-                                let mut ext = live;
-                                ext.configured = false;
-                                ext.daemon_online = true;
-                                let is_managed = ext.is_managed
-                                    || crate::docker::is_tailery_container(
-                                        &ext.name,
-                                        &ext.labels,
-                                        None,
-                                        &req.servers,
-                                    );
-                                ext.is_managed = is_managed;
-                                all_list.push(ext);
-                            }
+            if daemon_online
+                && let Some(ref d) = docker
+                && let Ok(live_containers) = d.list_containers_summary().await
+            {
+                for live in live_containers {
+                    let clean_live_name = live.name.trim_start_matches('/');
+                    if let Some(pos) = all_list
+                        .iter()
+                        .position(|c| c.name == live.name || c.name == clean_live_name)
+                    {
+                        all_list[pos].id = live.id.clone();
+                        all_list[pos].running = live.running;
+                        all_list[pos].state = live.state.clone();
+                        all_list[pos].status = live.status.clone();
+                        all_list[pos].is_managed = true;
+                        if !live.ports.is_empty() {
+                            all_list[pos].ports = live.ports;
                         }
+                        if !live.labels.is_empty() {
+                            all_list[pos].labels = live.labels;
+                        }
+                        all_list[pos].daemon_online = true;
+                        all_list[pos].error = None;
+                    } else {
+                        let mut ext = live;
+                        ext.configured = false;
+                        ext.daemon_online = true;
+                        let is_managed = ext.is_managed
+                            || crate::docker::is_tailery_container(
+                                &ext.name,
+                                &ext.labels,
+                                None,
+                                &req.servers,
+                            );
+                        ext.is_managed = is_managed;
+                        all_list.push(ext);
                     }
                 }
             }
@@ -203,21 +202,20 @@ pub fn start_docker_poller(
             };
 
             let mut logs = Vec::new();
-            if daemon_online {
-                if let Some(ref d) = docker {
-                    if let Some(ref selected_name) = req.selected_item_name {
-                        let matched_container = filtered_list.iter().find(|c| {
-                            c.name == *selected_name
-                                || c.name.trim_start_matches('/') == selected_name.trim_start_matches('/')
-                        });
-                        if let Some(c) = matched_container {
-                            if c.running && c.id != "-" {
-                                if let Ok(fetched_logs) = d.fetch_container_logs(&c.id, 50).await {
-                                    logs = fetched_logs;
-                                }
-                            }
-                        }
-                    }
+            if daemon_online
+                && let Some(ref d) = docker
+                && let Some(ref selected_name) = req.selected_item_name
+            {
+                let matched_container = filtered_list.iter().find(|c| {
+                    c.name == *selected_name
+                        || c.name.trim_start_matches('/') == selected_name.trim_start_matches('/')
+                });
+                if let Some(c) = matched_container
+                    && c.running
+                    && c.id != "-"
+                    && let Ok(fetched_logs) = d.fetch_container_logs(&c.id, 50).await
+                {
+                    logs = fetched_logs;
                 }
             }
 
@@ -392,8 +390,8 @@ impl App {
             inspector: Inspector::default(),
             server_browser: ServerBrowser::default(),
             greeting: Greeting::default(),
-            help: Help::default(),
-            sync_confirm: SyncConfirm::default(),
+            help: Help,
+            sync_confirm: SyncConfirm,
         };
         app.rebuild_managed_servers();
         Ok(app)
@@ -454,12 +452,14 @@ impl App {
 
     pub fn import_discovered_mcp(&mut self, mcp: crate::adapters::DiscoveredMcp) {
         let active_prof = self.app_state.settings.active_profile.clone();
-        self.app_state.servers.insert(mcp.name.clone(), mcp.config.clone());
+        self.app_state
+            .servers
+            .insert(mcp.name.clone(), mcp.config.clone());
         let profile = self
             .app_state
             .profiles
             .entry(active_prof.clone())
-            .or_insert_with(crate::state::ProfileConfig::default);
+            .or_default();
         if !profile.enabled_servers.contains(&mcp.name) {
             profile.enabled_servers.push(mcp.name.clone());
         }
@@ -543,7 +543,9 @@ impl App {
     pub fn open_new_profile_modal(&mut self) {
         let active = self.app_state.settings.active_profile.clone();
         self.wizard = Wizard::new(
-            crate::components::wizard::WizardType::Profile(crate::components::wizard::NewProfileWizard::new(&active)),
+            crate::components::wizard::WizardType::Profile(
+                crate::components::wizard::NewProfileWizard::new(&active),
+            ),
             "Create New MCP Profile",
         );
         self.active_modal = ActiveModal::Wizard;
@@ -552,7 +554,9 @@ impl App {
     pub fn open_new_server_modal(&mut self) {
         let active = self.app_state.settings.active_profile.clone();
         self.wizard = Wizard::new(
-            crate::components::wizard::WizardType::Server(crate::components::wizard::NewServerWizard::new(&active)),
+            crate::components::wizard::WizardType::Server(
+                crate::components::wizard::NewServerWizard::new(&active),
+            ),
             "Add MCP Server / Container",
         );
         self.active_modal = ActiveModal::Wizard;
@@ -565,7 +569,6 @@ impl App {
     pub fn open_help_modal(&mut self) {
         self.active_modal = ActiveModal::Help;
     }
-
 
     pub fn rebuild_managed_servers(&mut self) {
         let mut managed = std::collections::HashMap::new();
@@ -584,68 +587,70 @@ impl App {
         }
 
         let active_prof = self.app_state.settings.active_profile.clone();
-        if let Some(prof) = self.app_state.profiles.get(&active_prof) {
-            if prof.include_project_mcps {
-                let projects = crate::scanner::find_projects(&prof.project_search_paths, 3);
-                
-                for proj_path in projects {
-                    let mut found_servers = std::collections::HashMap::new();
+        if let Some(prof) = self.app_state.profiles.get(&active_prof)
+            && prof.include_project_mcps
+        {
+            let projects = crate::scanner::find_projects(&prof.project_search_paths, 3);
 
-                    for adapter in crate::adapters::all_adapters() {
-                        if let Ok(path) = adapter.config_path(Some(&proj_path)) {
-                            if path.exists() {
-                                if let Ok(servers) = adapter.read_servers(&path) {
-                                    for (name, cfg) in servers {
-                                        found_servers.insert(name, (cfg, true)); 
-                                    }
+            for proj_path in projects {
+                let mut found_servers = std::collections::HashMap::new();
+
+                for adapter in crate::adapters::all_adapters() {
+                    if let Ok(path) = adapter.config_path(Some(&proj_path))
+                        && path.exists()
+                        && let Ok(servers) = adapter.read_servers(&path)
+                    {
+                        for (name, cfg) in servers {
+                            found_servers.insert(name, (cfg, true));
+                        }
+                    }
+                }
+
+                let claude_adapter = crate::adapters::claude_code::ClaudeCodeAdapter;
+                if let Ok(global_claude_path) = claude_adapter.config_path(None)
+                    && global_claude_path.exists()
+                    && let Ok(content) = std::fs::read_to_string(&global_claude_path)
+                {
+                    let root: serde_json::Value = crate::adapters::parse_json_relaxed(&content);
+                    if let Some(projects_map) = root.get("projects").and_then(|v| v.as_object()) {
+                        let proj_str = proj_path.to_string_lossy().to_string();
+                        if let Some(proj_data) = projects_map.get(&proj_str)
+                            && let Some(mcp_servers) =
+                                proj_data.get("mcpServers").and_then(|v| v.as_object())
+                        {
+                            for (k, v) in mcp_servers {
+                                if !found_servers.contains_key(k) {
+                                    let cfg =
+                                        crate::adapters::claude_code::parse_claude_server_entry(v);
+                                    found_servers.insert(k.clone(), (cfg, false));
                                 }
                             }
                         }
                     }
+                }
 
-                    let claude_adapter = crate::adapters::claude_code::ClaudeCodeAdapter;
-                    if let Ok(global_claude_path) = claude_adapter.config_path(None) {
-                        if global_claude_path.exists() {
-                            if let Ok(content) = std::fs::read_to_string(&global_claude_path) {
-                                let root: serde_json::Value = crate::adapters::parse_json_relaxed(&content);
-                                if let Some(projects_map) = root.get("projects").and_then(|v| v.as_object()) {
-                                    let proj_str = proj_path.to_string_lossy().to_string();
-                                    if let Some(proj_data) = projects_map.get(&proj_str) {
-                                        if let Some(mcp_servers) = proj_data.get("mcpServers").and_then(|v| v.as_object()) {
-                                            for (k, v) in mcp_servers {
-                                                if !found_servers.contains_key(k) {
-                                                    let cfg = crate::adapters::claude_code::parse_claude_server_entry(v);
-                                                    found_servers.insert(k.clone(), (cfg, false));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                for (name, (cfg, is_in_repo)) in found_servers {
+                    if managed.contains_key(&name) && managed.get(&name).unwrap().is_global {
+                        continue;
                     }
 
-                    for (name, (cfg, is_in_repo)) in found_servers {
-                        if managed.contains_key(&name) && managed.get(&name).unwrap().is_global {
-                            continue;
-                        }
-
-                        let entry = managed.entry(name.clone()).or_insert_with(|| crate::state::ManagedServer {
+                    let entry = managed.entry(name.clone()).or_insert_with(|| {
+                        crate::state::ManagedServer {
                             name: name.clone(),
                             config: cfg,
                             is_global: false,
                             in_repo_paths: vec![],
                             client_global_project_paths: vec![],
-                        });
+                        }
+                    });
 
-                        if is_in_repo {
-                            if !entry.in_repo_paths.contains(&proj_path) {
-                                entry.in_repo_paths.push(proj_path.clone());
-                            }
-                        } else {
-                            if !entry.client_global_project_paths.contains(&proj_path) {
-                                entry.client_global_project_paths.push(proj_path.clone());
-                            }
+                    if is_in_repo {
+                        if !entry.in_repo_paths.contains(&proj_path) {
+                            entry.in_repo_paths.push(proj_path.clone());
+                        }
+                    } else {
+                        if !entry.client_global_project_paths.contains(&proj_path) {
+                            entry.client_global_project_paths.push(proj_path.clone());
                         }
                     }
                 }
@@ -679,7 +684,10 @@ impl App {
         self.set_status(format!("✔ Deleted profile '{}'", profile_name));
     }
 
-    pub fn install_registry_entry(&mut self, entry: &crate::components::mcp_browser::RegistryMcpEntry) {
+    pub fn install_registry_entry(
+        &mut self,
+        entry: &crate::components::mcp_browser::RegistryMcpEntry,
+    ) {
         let active_prof = self.app_state.settings.active_profile.clone();
         self.app_state
             .servers
@@ -689,7 +697,7 @@ impl App {
             .app_state
             .profiles
             .entry(active_prof.clone())
-            .or_insert_with(ProfileConfig::default);
+            .or_default();
         if !profile.enabled_servers.contains(&entry.name.to_string()) {
             profile.enabled_servers.push(entry.name.to_string());
         }
@@ -704,7 +712,7 @@ impl App {
     pub fn sync_all_clients(&mut self) {
         let mut synced = 0;
         let active_prof = self.app_state.settings.active_profile.clone();
-        
+
         for adapter in crate::adapters::all_adapters() {
             if !self
                 .app_state
@@ -734,7 +742,10 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                    enabled_clients: crate::state::default_enabled_clients(),
+                    include_project_mcps: false,
+                    project_search_paths: Vec::new(),
+                });
             let is_enabled = profile.toggle_client(client_name);
             self.save_config();
             if is_enabled {
@@ -764,7 +775,10 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                    enabled_clients: crate::state::default_enabled_clients(),
+                    include_project_mcps: false,
+                    project_search_paths: Vec::new(),
+                });
             profile.disable_client(client_name);
             self.save_config();
             self.set_status(format!(
@@ -786,7 +800,10 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                    enabled_clients: crate::state::default_enabled_clients(),
+                    include_project_mcps: false,
+                    project_search_paths: Vec::new(),
+                });
             let is_enabled = profile.toggle_server(&name);
             self.save_config();
             if is_enabled {
@@ -806,31 +823,31 @@ impl App {
     pub fn backup_current_client(&mut self) {
         let adapters = all_adapters();
         let active_prof = self.app_state.settings.active_profile.clone();
-        if let Some(adapter) = adapters.get(self.clients.selected_adapter_index % adapters.len()) {
-            if let Ok(path) = adapter.config_path(None) {
-                if path.exists() {
-                    match crate::backup::create_backup(&active_prof, adapter.name(), &path) {
-                        Ok(Some(entry)) => {
-                            self.trigger_diff_recompute(self.clients.selected_adapter_index);
-                            self.set_status(format!(
-                                "✔ Backed up {} for profile '{}' (ID: {}, 10 max retained)",
-                                adapter.display_name(),
-                                active_prof,
-                                entry.id
-                            ));
-                        }
-                        Ok(None) => self.set_status(format!(
-                            "○ {} config file does not exist",
-                            adapter.display_name()
-                        )),
-                        Err(e) => self.set_status(format!("✖ Backup failed: {}", e)),
+        if let Some(adapter) = adapters.get(self.clients.selected_adapter_index % adapters.len())
+            && let Ok(path) = adapter.config_path(None)
+        {
+            if path.exists() {
+                match crate::backup::create_backup(&active_prof, adapter.name(), &path) {
+                    Ok(Some(entry)) => {
+                        self.trigger_diff_recompute(self.clients.selected_adapter_index);
+                        self.set_status(format!(
+                            "✔ Backed up {} for profile '{}' (ID: {}, 10 max retained)",
+                            adapter.display_name(),
+                            active_prof,
+                            entry.id
+                        ));
                     }
-                } else {
-                    self.set_status(format!(
-                        "○ {} config file does not exist on disk",
+                    Ok(None) => self.set_status(format!(
+                        "○ {} config file does not exist",
                         adapter.display_name()
-                    ));
+                    )),
+                    Err(e) => self.set_status(format!("✖ Backup failed: {}", e)),
                 }
+            } else {
+                self.set_status(format!(
+                    "○ {} config file does not exist on disk",
+                    adapter.display_name()
+                ));
             }
         }
     }
@@ -859,7 +876,11 @@ impl App {
             return Vec::new();
         }
         let q_lower = self.clients.search_query.to_lowercase();
-        if let Some(cached) = self.clients.diff_cache.get(&self.clients.selected_adapter_index) {
+        if let Some(cached) = self
+            .clients
+            .diff_cache
+            .get(&self.clients.selected_adapter_index)
+        {
             cached
                 .changes
                 .iter()
@@ -876,7 +897,10 @@ impl App {
         let matches = self.get_diff_search_matches();
         if matches.is_empty() {
             if !self.clients.search_query.is_empty() {
-                self.set_status(format!("Pattern not found: \"{}\"", self.clients.search_query));
+                self.set_status(format!(
+                    "Pattern not found: \"{}\"",
+                    self.clients.search_query
+                ));
             }
             return;
         }
@@ -895,7 +919,10 @@ impl App {
         let matches = self.get_diff_search_matches();
         if matches.is_empty() {
             if !self.clients.search_query.is_empty() {
-                self.set_status(format!("Pattern not found: \"{}\"", self.clients.search_query));
+                self.set_status(format!(
+                    "Pattern not found: \"{}\"",
+                    self.clients.search_query
+                ));
             }
             return;
         }
@@ -966,7 +993,7 @@ impl App {
                     .app_state
                     .profiles
                     .entry(active_prof.clone())
-                    .or_insert_with(ProfileConfig::default);
+                    .or_default();
                 if !profile.enabled_servers.contains(&server_name) {
                     profile.enabled_servers.push(server_name.clone());
                 }
@@ -1026,21 +1053,34 @@ impl App {
         tui.enter()?;
 
         // Register action handler tx
-        self.sidebar.register_action_handler(self.action_tx.clone())?;
-        self.clients.register_action_handler(self.action_tx.clone())?;
+        self.sidebar
+            .register_action_handler(self.action_tx.clone())?;
+        self.clients
+            .register_action_handler(self.action_tx.clone())?;
         self.mcps.register_action_handler(self.action_tx.clone())?;
-        self.containers.register_action_handler(self.action_tx.clone())?;
-        self.skills.register_action_handler(self.action_tx.clone())?;
-        self.mcp_browser.register_action_handler(self.action_tx.clone())?;
-        self.profile_switcher.register_action_handler(self.action_tx.clone())?;
-        self.profile_editor.register_action_handler(self.action_tx.clone())?;
-        self.wizard.register_action_handler(self.action_tx.clone())?;
-        self.diff_viewer.register_action_handler(self.action_tx.clone())?;
-        self.inspector.register_action_handler(self.action_tx.clone())?;
-        self.server_browser.register_action_handler(self.action_tx.clone())?;
-        self.greeting.register_action_handler(self.action_tx.clone())?;
+        self.containers
+            .register_action_handler(self.action_tx.clone())?;
+        self.skills
+            .register_action_handler(self.action_tx.clone())?;
+        self.mcp_browser
+            .register_action_handler(self.action_tx.clone())?;
+        self.profile_switcher
+            .register_action_handler(self.action_tx.clone())?;
+        self.profile_editor
+            .register_action_handler(self.action_tx.clone())?;
+        self.wizard
+            .register_action_handler(self.action_tx.clone())?;
+        self.diff_viewer
+            .register_action_handler(self.action_tx.clone())?;
+        self.inspector
+            .register_action_handler(self.action_tx.clone())?;
+        self.server_browser
+            .register_action_handler(self.action_tx.clone())?;
+        self.greeting
+            .register_action_handler(self.action_tx.clone())?;
         self.help.register_action_handler(self.action_tx.clone())?;
-        self.sync_confirm.register_action_handler(self.action_tx.clone())?;
+        self.sync_confirm
+            .register_action_handler(self.action_tx.clone())?;
 
         let action_tx = self.action_tx.clone();
 
@@ -1070,10 +1110,10 @@ impl App {
             }
 
             // 4. Expire status message after 4s
-            if let Some((_, created_at)) = self.status_message {
-                if created_at.elapsed() > Duration::from_secs(4) {
-                    self.status_message = None;
-                }
+            if let Some((_, created_at)) = self.status_message
+                && created_at.elapsed() > Duration::from_secs(4)
+            {
+                self.status_message = None;
             }
 
             // 5. High-throughput event handling with burst draining:
@@ -1109,7 +1149,8 @@ impl App {
                     }
                     Event::Mouse(mouse) => {
                         let size = tui.size()?;
-                        self.handle_mouse_event(mouse, Rect::new(0, 0, size.width, size.height)).await?;
+                        self.handle_mouse_event(mouse, Rect::new(0, 0, size.width, size.height))
+                            .await?;
                         needs_render = true;
                     }
                     _ => {}
@@ -1275,7 +1316,8 @@ impl App {
                 }
             }
             ActiveModal::ProfileEditor => {
-                let mut sorted_servers: Vec<String> = self.app_state.servers.keys().cloned().collect();
+                let mut sorted_servers: Vec<String> =
+                    self.app_state.servers.keys().cloned().collect();
                 for k in self.app_state.configured_containers.keys() {
                     if !sorted_servers.contains(k) {
                         sorted_servers.push(k.clone());
@@ -1313,7 +1355,7 @@ impl App {
                                 .app_state
                                 .profiles
                                 .entry(prof_name.clone())
-                                .or_insert_with(ProfileConfig::default);
+                                .or_default();
                             let status_msg = match t {
                                 crate::components::profile_editor::ToggleTarget::Server(srv) => {
                                     let enabled = profile.toggle_server(&srv);
@@ -1348,16 +1390,13 @@ impl App {
                             .app_state
                             .profiles
                             .entry(prof_name.clone())
-                            .or_insert_with(ProfileConfig::default);
+                            .or_default();
                         let status_msg = if pane == 0 {
                             let all_enabled =
                                 sorted_servers.iter().all(|s| profile.is_server_enabled(s));
                             if all_enabled {
                                 profile.enabled_servers.clear();
-                                format!(
-                                    "○ Disabled all MCP servers for profile '{}'",
-                                    prof_name
-                                )
+                                format!("○ Disabled all MCP servers for profile '{}'", prof_name)
                             } else {
                                 for s in &sorted_servers {
                                     profile.enable_server(s);
@@ -1384,169 +1423,168 @@ impl App {
                     _ => {}
                 }
             }
-            ActiveModal::Wizard => {
-                match &mut self.wizard.wizard_type {
-                    crate::components::wizard::WizardType::Profile(w) => match key.code {
-                        KeyCode::Esc => {
-                            self.active_modal = ActiveModal::None;
-                            self.set_status("Profile creation cancelled.");
-                        }
-                        KeyCode::Backspace => {
-                            w.handle_backspace();
-                        }
-                        KeyCode::Up => {
-                            w.handle_up();
-                        }
-                        KeyCode::Down => {
-                            w.handle_down();
-                        }
-                        KeyCode::Char(' ') => {
-                            w.handle_space();
-                        }
-                        KeyCode::Char(c) => {
-                            w.handle_char(c);
-                        }
-                        KeyCode::Enter => {
-                            if let Some(res) = w.submit() {
-                                let mut enabled_servers = if res.copy_servers {
-                                    let curr = &self.app_state.settings.active_profile;
-                                    self.app_state
-                                        .profiles
-                                        .get(curr)
-                                        .map(|p| p.enabled_servers.clone())
-                                        .unwrap_or_default()
-                                } else {
-                                    Vec::new()
-                                };
-
-                                let include_project_mcps = !res.project_search_paths.is_empty();
-
-                                if res.import_clients {
-                                    for cli in &res.enabled_clients {
-                                        for adapter in crate::adapters::all_adapters() {
-                                            if adapter.name() == cli {
-                                                if let Ok(path) = adapter.config_path(None) {
-                                                    if path.exists() {
-                                                        if let Ok(servers) = adapter.read_servers(&path) {
-                                                            for (srv_name, cfg) in servers {
-                                                                if !self.app_state.servers.contains_key(&srv_name) {
-                                                                    self.app_state.servers.insert(srv_name.clone(), cfg);
-                                                                }
-                                                                if !enabled_servers.contains(&srv_name) {
-                                                                    enabled_servers.push(srv_name);
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                let mut new_prof = ProfileConfig::new(enabled_servers, res.enabled_clients);
-                                new_prof.include_project_mcps = include_project_mcps;
-                                new_prof.project_search_paths = res.project_search_paths;
-
-                                self.app_state.profiles.insert(
-                                    res.name.clone(),
-                                    new_prof,
-                                );
-
-                                if res.activate_now {
-                                    self.switch_profile(&res.name);
-                                }
-
-                                self.save_config();
-                                self.active_modal = ActiveModal::None;
-                                self.set_status(format!("✔ Saved & created profile '{}'!", res.name));
-                            }
-                        }
-                        _ => {}
-                    },
-                    crate::components::wizard::WizardType::Server(w) => match key.code {
-                        KeyCode::Esc => {
-                            self.active_modal = ActiveModal::None;
-                            self.set_status("Add MCP server cancelled.");
-                        }
-                        KeyCode::Backspace => {
-                            w.handle_backspace();
-                        }
-                        KeyCode::Char(c) => {
-                            w.handle_char(c);
-                        }
-                        KeyCode::Enter => {
-                            if let Some(res) = w.submit() {
-                                let active_prof = self.app_state.settings.active_profile.clone();
-                                let srv_name = res.name.clone();
+            ActiveModal::Wizard => match &mut self.wizard.wizard_type {
+                crate::components::wizard::WizardType::Profile(w) => match key.code {
+                    KeyCode::Esc => {
+                        self.active_modal = ActiveModal::None;
+                        self.set_status("Profile creation cancelled.");
+                    }
+                    KeyCode::Backspace => {
+                        w.handle_backspace();
+                    }
+                    KeyCode::Up => {
+                        w.handle_up();
+                    }
+                    KeyCode::Down => {
+                        w.handle_down();
+                    }
+                    KeyCode::Char(' ') => {
+                        w.handle_space();
+                    }
+                    KeyCode::Char(c) => {
+                        w.handle_char(c);
+                    }
+                    KeyCode::Enter => {
+                        if let Some(res) = w.submit() {
+                            let mut enabled_servers = if res.copy_servers {
+                                let curr = &self.app_state.settings.active_profile;
                                 self.app_state
-                                    .servers
-                                    .insert(srv_name.clone(), res.server_config);
+                                    .profiles
+                                    .get(curr)
+                                    .map(|p| p.enabled_servers.clone())
+                                    .unwrap_or_default()
+                            } else {
+                                Vec::new()
+                            };
 
-                                if res.add_to_profile {
-                                    let profile = self
-                                        .app_state
-                                        .profiles
-                                        .entry(active_prof.clone())
-                                        .or_insert_with(ProfileConfig::default);
-                                    if !profile.enabled_servers.contains(&srv_name) {
-                                        profile.enabled_servers.push(srv_name.clone());
-                                    }
-                                }
+                            let include_project_mcps = !res.project_search_paths.is_empty();
 
-                                self.save_config();
-                                self.active_modal = ActiveModal::None;
-                                self.set_status(format!(
-                                    "✔ Saved & added MCP server '{}' to profile '{}'!",
-                                    srv_name, active_prof
-                                ));
-
-                                let is_auto_start_local = match self.app_state.servers.get(&srv_name) {
-                                    Some(ServerConfig::Local { container, .. }) => {
-                                        container.auto_start && !container.image.is_empty()
-                                    }
-                                    _ => false,
-                                };
-
-                                if is_auto_start_local {
-                                    if let Some(ref d) = docker {
-                                        if d.ping().await {
-                                            if let Some(ServerConfig::Local { container, env, .. }) =
-                                                self.app_state.servers.get(&srv_name).cloned()
-                                            {
-                                                self.set_status(format!("⏳ Launching container '{}'...", srv_name));
-                                                match d.create_sandbox_container(&srv_name, &container, &env, None).await {
-                                                    Ok(cid) => {
-                                                        let _ = d.start_container(&cid).await;
-                                                        self.set_status(format!("✔ Container '{}' saved & started in Docker!", srv_name));
-                                                    }
-                                                    Err(e) => {
-                                                        self.set_status(format!("✔ Saved to config, but Docker launch failed: {}", e));
-                                                    }
+                            if res.import_clients {
+                                for cli in &res.enabled_clients {
+                                    for adapter in crate::adapters::all_adapters() {
+                                        if adapter.name() == cli
+                                            && let Ok(path) = adapter.config_path(None)
+                                            && path.exists()
+                                            && let Ok(servers) = adapter.read_servers(&path)
+                                        {
+                                            for (srv_name, cfg) in servers {
+                                                if !self.app_state.servers.contains_key(&srv_name) {
+                                                    self.app_state
+                                                        .servers
+                                                        .insert(srv_name.clone(), cfg);
                                                 }
-                                                self.trigger_docker_poll();
+                                                if !enabled_servers.contains(&srv_name) {
+                                                    enabled_servers.push(srv_name);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
+
+                            let mut new_prof =
+                                ProfileConfig::new(enabled_servers, res.enabled_clients);
+                            new_prof.include_project_mcps = include_project_mcps;
+                            new_prof.project_search_paths = res.project_search_paths;
+
+                            self.app_state.profiles.insert(res.name.clone(), new_prof);
+
+                            if res.activate_now {
+                                self.switch_profile(&res.name);
+                            }
+
+                            self.save_config();
+                            self.active_modal = ActiveModal::None;
+                            self.set_status(format!("✔ Saved & created profile '{}'!", res.name));
                         }
-                        _ => {}
-                    },
-                }
-            }
+                    }
+                    _ => {}
+                },
+                crate::components::wizard::WizardType::Server(w) => match key.code {
+                    KeyCode::Esc => {
+                        self.active_modal = ActiveModal::None;
+                        self.set_status("Add MCP server cancelled.");
+                    }
+                    KeyCode::Backspace => {
+                        w.handle_backspace();
+                    }
+                    KeyCode::Char(c) => {
+                        w.handle_char(c);
+                    }
+                    KeyCode::Enter => {
+                        if let Some(res) = w.submit() {
+                            let active_prof = self.app_state.settings.active_profile.clone();
+                            let srv_name = res.name.clone();
+                            self.app_state
+                                .servers
+                                .insert(srv_name.clone(), res.server_config);
+
+                            if res.add_to_profile {
+                                let profile = self
+                                    .app_state
+                                    .profiles
+                                    .entry(active_prof.clone())
+                                    .or_default();
+                                if !profile.enabled_servers.contains(&srv_name) {
+                                    profile.enabled_servers.push(srv_name.clone());
+                                }
+                            }
+
+                            self.save_config();
+                            self.active_modal = ActiveModal::None;
+                            self.set_status(format!(
+                                "✔ Saved & added MCP server '{}' to profile '{}'!",
+                                srv_name, active_prof
+                            ));
+
+                            let is_auto_start_local = match self.app_state.servers.get(&srv_name) {
+                                Some(ServerConfig::Local { container, .. }) => {
+                                    container.auto_start && !container.image.is_empty()
+                                }
+                                _ => false,
+                            };
+
+                            if is_auto_start_local
+                                && let Some(ref d) = docker
+                                && d.ping().await
+                                && let Some(ServerConfig::Local { container, env, .. }) =
+                                    self.app_state.servers.get(&srv_name).cloned()
+                            {
+                                self.set_status(format!(
+                                    "⏳ Launching container '{}'...",
+                                    srv_name
+                                ));
+                                match d
+                                    .create_sandbox_container(&srv_name, &container, &env, None)
+                                    .await
+                                {
+                                    Ok(cid) => {
+                                        let _ = d.start_container(&cid).await;
+                                        self.set_status(format!(
+                                            "✔ Container '{}' saved & started in Docker!",
+                                            srv_name
+                                        ));
+                                    }
+                                    Err(e) => {
+                                        self.set_status(format!(
+                                            "✔ Saved to config, but Docker launch failed: {}",
+                                            e
+                                        ));
+                                    }
+                                }
+                                self.trigger_docker_poll();
+                            }
+                        }
+                    }
+                    _ => {}
+                },
+            },
             ActiveModal::SyncConfirm => match key.code {
-                KeyCode::Enter
-                | KeyCode::Char('y')
-                | KeyCode::Char('Y')
-                | KeyCode::Char('s') => {
+                KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Char('s') => {
                     self.active_modal = ActiveModal::None;
                     self.sync_all_clients();
                 }
-                KeyCode::Esc
-                | KeyCode::Char('n')
-                | KeyCode::Char('N')
-                | KeyCode::Char('q') => {
+                KeyCode::Esc | KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Char('q') => {
                     self.active_modal = ActiveModal::None;
                     self.set_status("○ Client synchronization cancelled.");
                 }
@@ -1571,7 +1609,8 @@ impl App {
                                     .position(|&line| line >= self.clients.diff_scroll_offset)
                                     .unwrap_or(0);
                                 self.clients.search_match_index = target_idx;
-                                self.clients.diff_scroll_offset = matches[target_idx].saturating_sub(3);
+                                self.clients.diff_scroll_offset =
+                                    matches[target_idx].saturating_sub(3);
                                 self.set_status(format!(
                                     "/{} [{}/{}]",
                                     self.clients.search_query,
@@ -1617,17 +1656,24 @@ impl App {
                             self.previous_view();
                         }
                         KeyCode::Enter => {
-                            if self.mode == Mode::Clients && self.clients.focused_pane == 0 {
-                                if let Some(cached) = self.clients.diff_cache.get(&self.clients.selected_adapter_index) {
-                                    if let Some(mcp) = cached.discovered_mcps.get(self.clients.mcp_selected_index).cloned() {
-                                        self.import_discovered_mcp(mcp);
-                                    }
-                                }
+                            if self.mode == Mode::Clients
+                                && self.clients.focused_pane == 0
+                                && let Some(cached) = self
+                                    .clients
+                                    .diff_cache
+                                    .get(&self.clients.selected_adapter_index)
+                                && let Some(mcp) = cached
+                                    .discovered_mcps
+                                    .get(self.clients.mcp_selected_index)
+                                    .cloned()
+                            {
+                                self.import_discovered_mcp(mcp);
                             }
                         }
                         KeyCode::Char('1') => {
                             self.mode = Mode::Clients;
-                            self.sidebar.active_view = crate::components::sidebar::ActiveView::Clients;
+                            self.sidebar.active_view =
+                                crate::components::sidebar::ActiveView::Clients;
                             self.clients.search_active = false;
                             self.refresh_all_client_diffs();
                         }
@@ -1645,7 +1691,8 @@ impl App {
                         }
                         KeyCode::Char('3') => {
                             self.mode = Mode::Skills;
-                            self.sidebar.active_view = crate::components::sidebar::ActiveView::Skills;
+                            self.sidebar.active_view =
+                                crate::components::sidebar::ActiveView::Skills;
                             self.clients.search_active = false;
                         }
                         KeyCode::Char('/') => {
@@ -1671,10 +1718,16 @@ impl App {
                         KeyCode::Char('a') => self.open_new_server_modal(),
                         KeyCode::Char('i') => {
                             if self.mode == Mode::Clients {
-                                if let Some(cached) = self.clients.diff_cache.get(&self.clients.selected_adapter_index) {
-                                    if let Some(mcp) = cached.discovered_mcps.get(self.clients.mcp_selected_index).cloned() {
-                                        self.import_discovered_mcp(mcp);
-                                    }
+                                if let Some(cached) = self
+                                    .clients
+                                    .diff_cache
+                                    .get(&self.clients.selected_adapter_index)
+                                    && let Some(mcp) = cached
+                                        .discovered_mcps
+                                        .get(self.clients.mcp_selected_index)
+                                        .cloned()
+                                {
+                                    self.import_discovered_mcp(mcp);
                                 }
                             } else if self.mode == Mode::Mcps {
                                 self.mcps.bottom_mode = match self.mcps.bottom_mode {
@@ -1693,7 +1746,8 @@ impl App {
                                 if let Some(item) = items.get(self.mcps.selected_index) {
                                     let item_name = item.name.clone();
                                     let is_container = item.is_container;
-                                    let server_cfg = self.app_state.servers.get(&item_name).cloned();
+                                    let server_cfg =
+                                        self.app_state.servers.get(&item_name).cloned();
 
                                     if let Some(ref d) = docker {
                                         if d.ping().await {
@@ -1833,14 +1887,22 @@ impl App {
                                             );
                                         }
                                     } else {
-                                        self.set_status("Cannot start/stop: Docker daemon not available.");
+                                        self.set_status(
+                                            "Cannot start/stop: Docker daemon not available.",
+                                        );
                                     }
                                 }
                             } else if self.mode == Mode::Clients {
                                 let adapters = all_adapters();
-                                if let Some(adapter) = adapters.get(self.clients.selected_adapter_index % adapters.len()) {
-                                    if !self.app_state.is_client_enabled_in_active_profile(adapter.name()) {
-                                        let active_prof = self.app_state.settings.active_profile.clone();
+                                if let Some(adapter) = adapters
+                                    .get(self.clients.selected_adapter_index % adapters.len())
+                                {
+                                    if !self
+                                        .app_state
+                                        .is_client_enabled_in_active_profile(adapter.name())
+                                    {
+                                        let active_prof =
+                                            self.app_state.settings.active_profile.clone();
                                         self.set_status(format!(
                                             "○ {} is DISABLED for profile '{}'. Press [e] to enable sync.",
                                             adapter.display_name(), active_prof
@@ -1878,9 +1940,16 @@ impl App {
                         KeyCode::Char('e') | KeyCode::Char(' ') => {
                             if self.mode == Mode::Clients {
                                 if self.clients.focused_pane == 0 {
-                                    if let Some(cached) = self.clients.diff_cache.get(&self.clients.selected_adapter_index) {
-                                        if let Some(mcp) = cached.discovered_mcps.get(self.clients.mcp_selected_index).cloned() {
-                                            match mcp.status {
+                                    if let Some(cached) = self
+                                        .clients
+                                        .diff_cache
+                                        .get(&self.clients.selected_adapter_index)
+                                        && let Some(mcp) = cached
+                                            .discovered_mcps
+                                            .get(self.clients.mcp_selected_index)
+                                            .cloned()
+                                    {
+                                        match mcp.status {
                                                 crate::adapters::DiscoveredMcpStatus::Unmanaged | crate::adapters::DiscoveredMcpStatus::ManagedDiff => {
                                                     self.import_discovered_mcp(mcp);
                                                 }
@@ -1901,7 +1970,6 @@ impl App {
                                                     self.set_status(format!("● Enabled '{}' in profile '{}'", mcp.name, active_prof));
                                                 }
                                             }
-                                        }
                                     }
                                 } else {
                                     self.toggle_current_client_for_profile();
@@ -1920,12 +1988,15 @@ impl App {
                                     self.app_state.servers.remove(&name);
                                     self.save_config();
 
-                                    if let Some(ref d) = docker {
-                                        if d.ping().await {
-                                            let _ = d.remove_container(&name, true).await;
-                                        }
+                                    if let Some(ref d) = docker
+                                        && d.ping().await
+                                    {
+                                        let _ = d.remove_container(&name, true).await;
                                     }
-                                    self.set_status(format!("✔ Removed '{}' from configuration", name));
+                                    self.set_status(format!(
+                                        "✔ Removed '{}' from configuration",
+                                        name
+                                    ));
                                     self.trigger_docker_poll();
                                 }
                             }
@@ -1953,8 +2024,18 @@ impl App {
                         },
                         KeyCode::Down | KeyCode::Char('j') => match self.mode {
                             Mode::Clients => {
-                                let total_discovered = self.clients.diff_cache.get(&self.clients.selected_adapter_index).map(|c| c.discovered_mcps.len()).unwrap_or(0);
-                                let total_diff_lines = self.clients.diff_cache.get(&self.clients.selected_adapter_index).map(|c| c.changes.len()).unwrap_or(0);
+                                let total_discovered = self
+                                    .clients
+                                    .diff_cache
+                                    .get(&self.clients.selected_adapter_index)
+                                    .map(|c| c.discovered_mcps.len())
+                                    .unwrap_or(0);
+                                let total_diff_lines = self
+                                    .clients
+                                    .diff_cache
+                                    .get(&self.clients.selected_adapter_index)
+                                    .map(|c| c.changes.len())
+                                    .unwrap_or(0);
                                 self.clients.move_down(total_discovered, total_diff_lines);
                             }
                             Mode::Mcps => {
@@ -1965,22 +2046,25 @@ impl App {
                                 }
                             }
                             Mode::Skills => {
-                                if self.skills.selected_index + 1 < crate::components::skills::PREVIEW_SKILLS.len() {
+                                if self.skills.selected_index + 1
+                                    < crate::components::skills::PREVIEW_SKILLS.len()
+                                {
                                     self.skills.selected_index += 1;
                                 }
                             }
                         },
                         KeyCode::Left | KeyCode::Char('h') => {
-                            if self.mode == Mode::Clients && self.clients.selected_adapter_index > 0 {
+                            if self.mode == Mode::Clients && self.clients.selected_adapter_index > 0
+                            {
                                 self.select_client_tab(self.clients.selected_adapter_index - 1);
                             }
                         }
-                        KeyCode::Right | KeyCode::Char('l') => {
+                        KeyCode::Right | KeyCode::Char('l')
                             if self.mode == Mode::Clients
-                                && self.clients.selected_adapter_index + 1 < all_adapters().len()
-                            {
-                                self.select_client_tab(self.clients.selected_adapter_index + 1);
-                            }
+                                && self.clients.selected_adapter_index + 1
+                                    < all_adapters().len() =>
+                        {
+                            self.select_client_tab(self.clients.selected_adapter_index + 1);
                         }
                         _ => {}
                     }
@@ -1994,7 +2078,11 @@ impl App {
         Ok(())
     }
 
-    async fn handle_mouse_event(&mut self, mouse: MouseEvent, tui_size: Rect) -> color_eyre::Result<()> {
+    async fn handle_mouse_event(
+        &mut self,
+        mouse: MouseEvent,
+        tui_size: Rect,
+    ) -> color_eyre::Result<()> {
         match mouse.kind {
             MouseEventKind::Down(MouseButton::Left) => {
                 let col = mouse.column;
@@ -2005,7 +2093,8 @@ impl App {
                         self.active_modal = ActiveModal::None;
                     }
                     ActiveModal::McpBrowser => {
-                        let registry_entries = crate::components::mcp_browser::get_mcp_registry_entries();
+                        let registry_entries =
+                            crate::components::mcp_browser::get_mcp_registry_entries();
                         let filtered_count = if self.mcp_browser.search_query.is_empty() {
                             registry_entries.len()
                         } else {
@@ -2026,7 +2115,8 @@ impl App {
                         }
                     }
                     ActiveModal::ProfileSwitcher => {
-                        let mut profiles: Vec<String> = self.app_state.profiles.keys().cloned().collect();
+                        let mut profiles: Vec<String> =
+                            self.app_state.profiles.keys().cloned().collect();
                         profiles.sort();
                         if row >= 8 && row <= 8 + profiles.len() as u16 {
                             let clicked_idx = (row - 8) as usize;
@@ -2042,17 +2132,20 @@ impl App {
                             match row {
                                 4..=5 => {
                                     self.mode = Mode::Clients;
-                                    self.sidebar.active_view = crate::components::sidebar::ActiveView::Clients;
+                                    self.sidebar.active_view =
+                                        crate::components::sidebar::ActiveView::Clients;
                                     self.refresh_all_client_diffs();
                                 }
                                 6 => {
                                     self.mode = Mode::Mcps;
-                                    self.sidebar.active_view = crate::components::sidebar::ActiveView::Mcps;
+                                    self.sidebar.active_view =
+                                        crate::components::sidebar::ActiveView::Mcps;
                                     self.trigger_docker_poll();
                                 }
                                 7..=8 => {
                                     self.mode = Mode::Skills;
-                                    self.sidebar.active_view = crate::components::sidebar::ActiveView::Skills;
+                                    self.sidebar.active_view =
+                                        crate::components::sidebar::ActiveView::Skills;
                                 }
                                 10 => self.open_mcp_browser_modal(),
                                 11 => self.open_profile_switcher_modal(),
@@ -2078,11 +2171,17 @@ impl App {
                                             self.select_client_tab(clicked_tab);
                                         }
                                     } else if row > 6 {
-                                        let mid_x = 25 + (tui_size.width.saturating_sub(25)) * 45 / 100;
+                                        let mid_x =
+                                            25 + (tui_size.width.saturating_sub(25)) * 45 / 100;
                                         if col < mid_x {
                                             self.clients.focused_pane = 0;
                                             let clicked_mcp = (row.saturating_sub(8)) as usize;
-                                            let total_discovered = self.clients.diff_cache.get(&self.clients.selected_adapter_index).map(|c| c.discovered_mcps.len()).unwrap_or(0);
+                                            let total_discovered = self
+                                                .clients
+                                                .diff_cache
+                                                .get(&self.clients.selected_adapter_index)
+                                                .map(|c| c.discovered_mcps.len())
+                                                .unwrap_or(0);
                                             if clicked_mcp < total_discovered {
                                                 self.clients.mcp_selected_index = clicked_mcp;
                                             }
@@ -2098,8 +2197,8 @@ impl App {
                                     if row < mid_y {
                                         if row >= 2 {
                                             let clicked_row = (row - 2) as usize;
-                                            let total_items =
-                                                self.app_state.servers.len() + self.app_state.containers.len();
+                                            let total_items = self.app_state.servers.len()
+                                                + self.app_state.containers.len();
                                             if clicked_row < total_items {
                                                 self.mcps.selected_index = clicked_row;
                                                 self.trigger_docker_poll();
@@ -2118,7 +2217,9 @@ impl App {
                                 Mode::Skills => {
                                     if row >= 8 {
                                         let clicked_idx = (row - 8) as usize;
-                                        if clicked_idx < crate::components::skills::PREVIEW_SKILLS.len() {
+                                        if clicked_idx
+                                            < crate::components::skills::PREVIEW_SKILLS.len()
+                                        {
                                             self.skills.selected_index = clicked_idx;
                                         }
                                     }
@@ -2177,7 +2278,8 @@ impl App {
             },
             MouseEventKind::ScrollDown => match self.active_modal {
                 ActiveModal::McpBrowser => {
-                    let registry_entries = crate::components::mcp_browser::get_mcp_registry_entries();
+                    let registry_entries =
+                        crate::components::mcp_browser::get_mcp_registry_entries();
                     let max_len = if self.mcp_browser.search_query.is_empty() {
                         registry_entries.len()
                     } else {
@@ -2230,7 +2332,9 @@ impl App {
                         }
                     }
                     Mode::Skills => {
-                        if self.skills.selected_index + 1 < crate::components::skills::PREVIEW_SKILLS.len() {
+                        if self.skills.selected_index + 1
+                            < crate::components::skills::PREVIEW_SKILLS.len()
+                        {
                             self.skills.selected_index += 1;
                         }
                     }
@@ -2275,11 +2379,12 @@ impl App {
 
     fn render(&mut self, tui: &mut Tui) -> color_eyre::Result<()> {
         let matches = self.get_diff_search_matches();
-        let current_match_line = if !matches.is_empty() && self.clients.search_match_index < matches.len() {
-            Some(matches[self.clients.search_match_index])
-        } else {
-            None
-        };
+        let current_match_line =
+            if !matches.is_empty() && self.clients.search_match_index < matches.len() {
+                Some(matches[self.clients.search_match_index])
+            } else {
+                None
+            };
         self.clients.total_matches = matches.len();
         self.clients.current_match_line = current_match_line;
 
@@ -2309,8 +2414,12 @@ impl App {
 
             // 2. Render Active View
             match self.mode {
-                Mode::Clients => frame.render_stateful_widget(&self.clients, main_split[1], &mut self.app_state),
-                Mode::Mcps => frame.render_stateful_widget(&self.mcps, main_split[1], &mut self.app_state),
+                Mode::Clients => {
+                    frame.render_stateful_widget(&self.clients, main_split[1], &mut self.app_state)
+                }
+                Mode::Mcps => {
+                    frame.render_stateful_widget(&self.mcps, main_split[1], &mut self.app_state)
+                }
                 Mode::Skills => frame.render_widget(&self.skills, main_split[1]),
             }
 
@@ -2376,7 +2485,8 @@ impl App {
             } else {
                 let is_curr_client_disabled = if self.mode == Mode::Clients {
                     let adapters = all_adapters();
-                    adapters.get(self.clients.selected_adapter_index % adapters.len())
+                    adapters
+                        .get(self.clients.selected_adapter_index % adapters.len())
                         .map(|a| !self.app_state.is_client_enabled_in_active_profile(a.name()))
                         .unwrap_or(false)
                 } else {
@@ -2442,17 +2552,29 @@ impl App {
                 ActiveModal::McpBrowser => {
                     let modal_area = crate::components::wizard::centered_rect(84, 82, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.mcp_browser, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.mcp_browser,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::ProfileSwitcher => {
                     let modal_area = crate::components::wizard::centered_rect(54, 48, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.profile_switcher, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.profile_switcher,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::ProfileEditor => {
                     let modal_area = crate::components::wizard::centered_rect(76, 70, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.profile_editor, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.profile_editor,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::Wizard => {
                     let modal_area = crate::components::wizard::centered_rect(68, 68, size);
@@ -2462,17 +2584,29 @@ impl App {
                 ActiveModal::SyncConfirm => {
                     let modal_area = crate::components::wizard::centered_rect(64, 52, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.sync_confirm, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.sync_confirm,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::ServerBrowser => {
                     let modal_area = crate::components::wizard::centered_rect(80, 78, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.server_browser, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.server_browser,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::DiffViewer => {
                     let modal_area = crate::components::wizard::centered_rect(80, 78, size);
                     frame.render_widget(Clear, modal_area);
-                    frame.render_stateful_widget(&self.diff_viewer, modal_area, &mut self.app_state);
+                    frame.render_stateful_widget(
+                        &self.diff_viewer,
+                        modal_area,
+                        &mut self.app_state,
+                    );
                 }
                 ActiveModal::Inspector => {
                     let modal_area = crate::components::wizard::centered_rect(80, 78, size);

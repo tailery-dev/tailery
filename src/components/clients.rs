@@ -31,10 +31,7 @@ pub struct CachedClientDiff {
     pub discovered_mcps: Vec<crate::adapters::DiscoveredMcp>,
 }
 
-pub fn compute_client_diff_full(
-    state: &AppState,
-    adapter_index: usize,
-) -> CachedClientDiff {
+pub fn compute_client_diff_full(state: &AppState, adapter_index: usize) -> CachedClientDiff {
     let adapters = all_adapters();
     if adapters.is_empty() {
         return CachedClientDiff::default();
@@ -176,6 +173,7 @@ pub fn highlight_matches<'a>(
     spans
 }
 
+#[derive(Default)]
 pub struct Clients {
     pub selected_adapter_index: usize,
     pub focused_pane: usize, // 0: Discovered MCPs, 1: Diff Preview
@@ -189,25 +187,6 @@ pub struct Clients {
     pub command_tx: Option<UnboundedSender<Action>>,
     pub diff_cache: HashMap<usize, CachedClientDiff>,
     pub installed_cache: HashMap<usize, bool>,
-}
-
-impl Default for Clients {
-    fn default() -> Self {
-        Self {
-            selected_adapter_index: 0,
-            focused_pane: 0,
-            mcp_selected_index: 0,
-            diff_scroll_offset: 0,
-            search_active: false,
-            search_query: String::new(),
-            search_match_index: 0,
-            total_matches: 0,
-            current_match_line: None,
-            command_tx: None,
-            diff_cache: HashMap::new(),
-            installed_cache: HashMap::new(),
-        }
-    }
 }
 
 impl Clients {
@@ -666,10 +645,7 @@ impl StatefulWidget for &Clients {
         } else {
             Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(60),
-                ])
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .split(chunks[2])
         };
 
@@ -692,10 +668,9 @@ impl StatefulWidget for &Clients {
                             .fg(Color::Green)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    crate::adapters::DiscoveredMcpStatus::ManagedDisabled => (
-                        "○ DISABLED",
-                        Style::default().fg(Color::DarkGray),
-                    ),
+                    crate::adapters::DiscoveredMcpStatus::ManagedDisabled => {
+                        ("○ DISABLED", Style::default().fg(Color::DarkGray))
+                    }
                     crate::adapters::DiscoveredMcpStatus::ManagedDiff => (
                         "▲ DIFF",
                         Style::default()
@@ -716,19 +691,26 @@ impl StatefulWidget for &Clients {
                         .bg(Color::Cyan)
                         .add_modifier(Modifier::BOLD)
                 } else {
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD)
                 };
 
                 let scope_style = match &mcp.scope {
                     crate::adapters::McpSourceScope::User => Style::default().fg(Color::DarkGray),
-                    crate::adapters::McpSourceScope::Project(_) => Style::default().fg(Color::Magenta),
+                    crate::adapters::McpSourceScope::Project(_) => {
+                        Style::default().fg(Color::Magenta)
+                    }
                 };
 
                 Row::new(vec![
                     Span::styled(format!(" {}", status_badge), status_style),
                     Span::styled(format!(" {}", mcp.name), name_style),
                     Span::styled(format!(" {}", mcp.scope), scope_style),
-                    Span::styled(format!(" {}", mcp.transport_label), Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!(" {}", mcp.transport_label),
+                        Style::default().fg(Color::DarkGray),
+                    ),
                 ])
             })
             .collect();
@@ -744,9 +726,14 @@ impl StatefulWidget for &Clients {
             .border_type(BorderType::Rounded)
             .border_style(Style::default().fg(mcp_border_color))
             .title(Span::styled(
-                format!(" Discovered MCPs ({}) │ [Tab] Focus │ [i] Import │ [e] Toggle ", total_discovered),
+                format!(
+                    " Discovered MCPs ({}) │ [Tab] Focus │ [i] Import │ [e] Toggle ",
+                    total_discovered
+                ),
                 if is_mcp_pane_focused {
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default().fg(Color::White)
                 },
@@ -871,15 +858,15 @@ impl StatefulWidget for &Clients {
 
 #[cfg(test)]
 mod tests {
-    use crate::adapters::ZedAdapter;
     use crate::adapters::ClientAdapter;
+    use crate::adapters::ZedAdapter;
     use crate::state::*;
-    use std::collections::HashMap;
     use serde_json::json;
+    use std::collections::HashMap;
 
     #[test]
     fn test_diff_isolates_managed_keys_only() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -942,7 +929,10 @@ mod tests {
             "default".to_string(),
             ProfileConfig {
                 enabled_servers: vec!["active-server".to_string()],
-                enabled_clients: vec!["cursor".to_string()], include_project_mcps: false, project_search_paths: Vec::new() },
+                enabled_clients: vec!["cursor".to_string()],
+                include_project_mcps: false,
+                project_search_paths: Vec::new(),
+            },
         );
 
         let mut state = AppState {
@@ -970,13 +960,21 @@ mod tests {
         assert!(!diff_initial.generated_json.contains("disabled-server"));
 
         // 2. Enable "disabled-server" in active profile
-        state.profiles.get_mut("default").unwrap().enable_server("disabled-server");
+        state
+            .profiles
+            .get_mut("default")
+            .unwrap()
+            .enable_server("disabled-server");
         let diff_enabled = super::compute_client_diff_full(&state, 0);
         assert!(diff_enabled.generated_json.contains("active-server"));
         assert!(diff_enabled.generated_json.contains("disabled-server"));
 
         // 3. Disable "active-server" in active profile
-        state.profiles.get_mut("default").unwrap().disable_server("active-server");
+        state
+            .profiles
+            .get_mut("default")
+            .unwrap()
+            .disable_server("active-server");
         let diff_disabled = super::compute_client_diff_full(&state, 0);
         assert!(!diff_disabled.generated_json.contains("active-server"));
         assert!(diff_disabled.generated_json.contains("disabled-server"));
@@ -1006,7 +1004,10 @@ mod tests {
         let mut state = AppState::default();
         state.profiles.insert(
             "default".to_string(),
-            ProfileConfig::new(vec!["active-mcp".to_string()], vec!["claude_code".to_string()]),
+            ProfileConfig::new(
+                vec!["active-mcp".to_string()],
+                vec!["claude_code".to_string()],
+            ),
         );
         state.servers.insert(
             "active-mcp".to_string(),
@@ -1020,11 +1021,14 @@ mod tests {
             },
         );
 
-        let claude_adapter = crate::adapters::claude_code::ClaudeCodeAdapter::default();
-        let existing_json = crate::adapters::parse_json_relaxed(&std::fs::read_to_string(&path).unwrap());
+        let claude_adapter = crate::adapters::claude_code::ClaudeCodeAdapter;
+        let existing_json =
+            crate::adapters::parse_json_relaxed(&std::fs::read_to_string(&path).unwrap());
         let active_servers = state.get_active_profile_servers();
 
-        let merged = claude_adapter.merge_managed_config(&path, Some(&existing_json), &active_servers).unwrap();
+        let merged = claude_adapter
+            .merge_managed_config(&path, Some(&existing_json), &active_servers)
+            .unwrap();
         let target_managed = claude_adapter.extract_managed_config(&path, &merged);
 
         // Verify target config contains both SuperhumanDocs (preserved) and active-mcp (added)
@@ -1039,7 +1043,10 @@ mod tests {
         // There should be NO deletion lines (`-`) for SuperhumanDocs
         for change in diff.iter_all_changes() {
             if change.tag() == similar::ChangeTag::Delete {
-                assert!(!change.value().contains("SuperhumanDocs"), "Unmanaged SuperhumanDocs was falsely marked for deletion!");
+                assert!(
+                    !change.value().contains("SuperhumanDocs"),
+                    "Unmanaged SuperhumanDocs was falsely marked for deletion!"
+                );
             }
         }
 

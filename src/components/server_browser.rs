@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 
 use crate::action::Action;
@@ -189,9 +189,7 @@ impl StatefulWidget for &ServerBrowser {
                     transport,
                 } => {
                     let transport_str = match transport {
-                        crate::state::LocalTransport::Stdio => {
-                            "stdio (Docker Container with Shim)"
-                        }
+                        crate::state::LocalTransport::Stdio => "stdio (Docker Container with Shim)",
                         crate::state::LocalTransport::StreamableHttp { .. } => {
                             "streamable-http (Docker Container with Shim)"
                         }

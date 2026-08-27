@@ -4,17 +4,17 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 
-use crate::state::{ContainerConfig, MountConfig, ResourceLimits, ServerConfig, ToolFilter, AppState};
 use crate::action::Action;
 use crate::components::Component;
+use crate::state::{
+    AppState, ContainerConfig, MountConfig, ResourceLimits, ServerConfig, ToolFilter,
+};
 use crate::tui::Event;
 
-#[derive(Debug, Clone)]
-
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RegistryMcpEntry {
     pub name: &'static str,
     pub display_title: &'static str,
@@ -68,10 +68,14 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Inspect repositories, search code, read issues, review pull requests, and query commit history.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-github".to_string()],
-                env: std::collections::HashMap::from([
-                    ("GITHUB_PERSONAL_ACCESS_TOKEN".to_string(), "${keychain:github-pat}".to_string()),
-                ]),
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-github".to_string(),
+                ],
+                env: std::collections::HashMap::from([(
+                    "GITHUB_PERSONAL_ACCESS_TOKEN".to_string(),
+                    "${keychain:github-pat}".to_string(),
+                )]),
                 tool_filter: ToolFilter::default(),
                 container: ContainerConfig::default(),
                 transport: crate::state::LocalTransport::Stdio,
@@ -85,10 +89,18 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Read-only schema inspection and SQL query runner with parameterized safety guardrails.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-postgres".to_string(), "postgresql://localhost/mydb".to_string()],
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-postgres".to_string(),
+                    "postgresql://localhost/mydb".to_string(),
+                ],
                 env: std::collections::HashMap::new(),
                 tool_filter: ToolFilter {
-                    allow: vec!["query".to_string(), "list_tables".to_string(), "describe_table".to_string()],
+                    allow: vec![
+                        "query".to_string(),
+                        "list_tables".to_string(),
+                        "describe_table".to_string(),
+                    ],
                     deny: vec![],
                     auto_approve: vec![],
                 },
@@ -104,10 +116,14 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Privacy-preserving web search and local result indexing without tracking or ad injects.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-brave-search".to_string()],
-                env: std::collections::HashMap::from([
-                    ("BRAVE_API_KEY".to_string(), "${keychain:brave-api-key}".to_string()),
-                ]),
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-brave-search".to_string(),
+                ],
+                env: std::collections::HashMap::from([(
+                    "BRAVE_API_KEY".to_string(),
+                    "${keychain:brave-api-key}".to_string(),
+                )]),
                 tool_filter: ToolFilter::default(),
                 container: ContainerConfig::default(),
                 transport: crate::state::LocalTransport::Stdio,
@@ -121,7 +137,10 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Persistent knowledge graph memory service that tracks entity relationships across long-running sessions.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-memory".to_string()],
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-memory".to_string(),
+                ],
                 env: std::collections::HashMap::new(),
                 tool_filter: ToolFilter::default(),
                 container: ContainerConfig::default(),
@@ -136,7 +155,10 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Lightweight web page fetcher that converts HTML directly to clean token-efficient Markdown.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-fetch".to_string()],
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-fetch".to_string(),
+                ],
                 env: std::collections::HashMap::new(),
                 tool_filter: ToolFilter::default(),
                 container: ContainerConfig::default(),
@@ -151,7 +173,11 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             description: "Local SQLite file reader, schema analyzer, and interactive query harness.",
             default_config: ServerConfig::Local {
                 command: Some("npx".to_string()),
-                args: vec!["-y".to_string(), "@modelcontextprotocol/server-sqlite".to_string(), "./data.db".to_string()],
+                args: vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-sqlite".to_string(),
+                    "./data.db".to_string(),
+                ],
                 env: std::collections::HashMap::new(),
                 tool_filter: ToolFilter::default(),
                 container: ContainerConfig::default(),
@@ -194,9 +220,10 @@ pub fn get_mcp_registry_entries() -> Vec<RegistryMcpEntry> {
             default_config: ServerConfig::Remote {
                 url: "https://mcp.linear.app/stream".to_string(),
                 transport: crate::state::RemoteTransport::StreamableHttp,
-                headers: std::collections::HashMap::from([
-                    ("Authorization".to_string(), "Bearer ${keychain:linear-key}".to_string()),
-                ]),
+                headers: std::collections::HashMap::from([(
+                    "Authorization".to_string(),
+                    "Bearer ${keychain:linear-key}".to_string(),
+                )]),
                 env: std::collections::HashMap::new(),
                 tool_filter: ToolFilter::default(),
                 shim_port: None,
@@ -226,7 +253,10 @@ pub struct McpBrowser {
 }
 
 impl Component for McpBrowser {
-    fn register_action_handler(&mut self, _tx: tokio::sync::mpsc::UnboundedSender<Action>) -> color_eyre::Result<()> {
+    fn register_action_handler(
+        &mut self,
+        _tx: tokio::sync::mpsc::UnboundedSender<Action>,
+    ) -> color_eyre::Result<()> {
         Ok(())
     }
 
@@ -277,11 +307,9 @@ impl Component for McpBrowser {
                     self.selected_index = 0;
                 }
             }
-            crossterm::event::KeyCode::Char(c) => {
-                if self.search_focused {
-                    self.search_query.push(c);
-                    self.selected_index = 0;
-                }
+            crossterm::event::KeyCode::Char(c) if self.search_focused => {
+                self.search_query.push(c);
+                self.selected_index = 0;
             }
             _ => {}
         }
@@ -398,7 +426,11 @@ impl StatefulWidget for &McpBrowser {
             .border_type(BorderType::Rounded)
             .border_style(search_border_style)
             .title(search_title);
-        Widget::render(Paragraph::new(Line::from(search_line_spans)).block(search_block), main_chunks[0], buf);
+        Widget::render(
+            Paragraph::new(Line::from(search_line_spans)).block(search_block),
+            main_chunks[0],
+            buf,
+        );
 
         let middle_split = Layout::default()
             .direction(Direction::Horizontal)
@@ -406,10 +438,7 @@ impl StatefulWidget for &McpBrowser {
             .split(main_chunks[1]);
 
         let active_prof = &state.settings.active_profile;
-        let enabled_in_profile = state
-            .profiles
-            .get(active_prof)
-            .map(|p| &p.enabled_servers);
+        let enabled_in_profile = state.profiles.get(active_prof).map(|p| &p.enabled_servers);
 
         let all_entries = get_mcp_registry_entries();
         let filtered_entries: Vec<_> = all_entries
@@ -661,7 +690,11 @@ impl StatefulWidget for &McpBrowser {
                     .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
             ));
-        Widget::render(Paragraph::new(detail_lines).block(detail_block), middle_split[1], buf);
+        Widget::render(
+            Paragraph::new(detail_lines).block(detail_block),
+            middle_split[1],
+            buf,
+        );
 
         let action_line = if self.search_focused {
             Line::from(vec![
