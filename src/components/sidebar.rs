@@ -83,7 +83,9 @@ impl StatefulWidget for &Sidebar {
             Style::default().fg(Color::Magenta),
         )));
 
-        let client_count = state.profiles.get(&state.settings.active_profile)
+        let client_count = state
+            .profiles
+            .get(&state.settings.active_profile)
             .map(|p| p.enabled_clients.len())
             .unwrap_or(0);
 

@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 
 use crate::action::Action;

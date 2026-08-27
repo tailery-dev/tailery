@@ -14,10 +14,10 @@ pub fn init() -> color_eyre::Result<()> {
         .into_hooks();
     eyre_hook.install()?;
     std::panic::set_hook(Box::new(move |panic_info| {
-        if let Ok(mut t) = crate::tui::Tui::new() {
-            if let Err(r) = t.exit() {
-                error!("Unable to exit Terminal: {:?}", r);
-            }
+        if let Ok(mut t) = crate::tui::Tui::new()
+            && let Err(r) = t.exit()
+        {
+            error!(name: "terminal.exit.failed", error_message = ?r, "Unable to exit Terminal: {{error_message}}");
         }
 
         #[cfg(not(debug_assertions))]
@@ -31,7 +31,8 @@ pub fn init() -> color_eyre::Result<()> {
             eprintln!("{}", panic_hook.panic_report(panic_info)); // prints color-eyre stack trace to stderr
         }
         let msg = format!("{}", panic_hook.panic_report(panic_info));
-        error!("Error: {}", strip_ansi_escapes::strip_str(msg));
+        let stripped_msg = strip_ansi_escapes::strip_str(msg);
+        error!(name: "app.panic", error_message = %stripped_msg, "Error: {{error_message}}");
 
         #[cfg(debug_assertions)]
         {

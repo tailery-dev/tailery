@@ -162,7 +162,11 @@ impl ClientAdapter for ZedAdapter {
                             transport: crate::state::LocalTransport::Stdio,
                         },
                     );
-                } else if let Some(url_str) = val.get("url").or_else(|| val.get("endpoint")).and_then(|v| v.as_str()) {
+                } else if let Some(url_str) = val
+                    .get("url")
+                    .or_else(|| val.get("endpoint"))
+                    .and_then(|v| v.as_str())
+                {
                     let headers = val
                         .get("headers")
                         .and_then(|v| v.as_object())
@@ -189,11 +193,7 @@ impl ClientAdapter for ZedAdapter {
         Ok(result)
     }
 
-    fn extract_managed_config(
-        &self,
-        _path: &Path,
-        content_json: &Value,
-    ) -> Value {
+    fn extract_managed_config(&self, _path: &Path, content_json: &Value) -> Value {
         let mut managed = serde_json::Map::new();
         let servers = content_json
             .get("context_servers")
@@ -216,7 +216,9 @@ impl ClientAdapter for ZedAdapter {
         };
 
         if let Some(root_map) = root.as_object_mut() {
-            let mut target_servers = if let Some(existing_servers) = root_map.get("context_servers").and_then(|v| v.as_object()) {
+            let mut target_servers = if let Some(existing_servers) =
+                root_map.get("context_servers").and_then(|v| v.as_object())
+            {
                 existing_servers.clone()
             } else {
                 serde_json::Map::new()
@@ -229,7 +231,12 @@ impl ClientAdapter for ZedAdapter {
                     true
                 } else if let Some(cmd_obj) = v.get("command").and_then(|c| c.as_object()) {
                     if let Some(args) = cmd_obj.get("args").and_then(|a| a.as_array()) {
-                        args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                        args.iter().any(|arg| {
+                            arg.as_str().is_some_and(|s| {
+                                s.contains("dev.tailery.managed=true")
+                                    || s.contains("dev.tailery.server=")
+                            })
+                        })
                     } else {
                         false
                     }
@@ -246,7 +253,8 @@ impl ClientAdapter for ZedAdapter {
                 target_servers.remove(&k);
             }
 
-            if let Some(new_servers) = generated.get("context_servers").and_then(|v| v.as_object()) {
+            if let Some(new_servers) = generated.get("context_servers").and_then(|v| v.as_object())
+            {
                 for (k, v) in new_servers {
                     target_servers.insert(k.clone(), v.clone());
                 }
@@ -274,13 +282,17 @@ impl ClientAdapter for ZedAdapter {
         for (name, cfg) in servers {
             let status = super::classify_mcp_status(&name, &cfg, state);
             let transport_label = match &cfg {
-                ServerConfig::Local { transport, command, .. } => {
+                ServerConfig::Local {
+                    transport, command, ..
+                } => {
                     if command.as_deref() == Some("docker") {
                         "docker".to_string()
                     } else {
                         match transport {
                             crate::state::LocalTransport::Stdio => "stdio".to_string(),
-                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => {
+                                "streamable-http".to_string()
+                            }
                             crate::state::LocalTransport::Http { .. } => "http".to_string(),
                             crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
                         }
@@ -310,7 +322,8 @@ impl ClientAdapter for ZedAdapter {
         managed_servers: &HashMap<String, crate::state::ManagedServer>,
     ) -> Result<usize, AdapterError> {
         let mut global_servers = HashMap::new();
-        let mut project_servers_by_path: HashMap<PathBuf, HashMap<String, ServerConfig>> = HashMap::new();
+        let mut project_servers_by_path: HashMap<PathBuf, HashMap<String, ServerConfig>> =
+            HashMap::new();
         let mut synced_count = 0;
 
         for (name, srv) in managed_servers {
@@ -362,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_zed_generate_config() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "zed-mcp".to_string(),
@@ -385,7 +398,7 @@ mod tests {
 
     #[test]
     fn test_zed_generate_config_custom_container() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "sandboxed-git".to_string(),
@@ -432,7 +445,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_zed_read_write_roundtrip() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -473,7 +486,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_zed_preserves_unmanaged_keys_and_diff_extract() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -532,7 +545,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_zed_jsonc_with_comments_and_trailing_commas() {
-        let adapter = ZedAdapter::default();
+        let adapter = ZedAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()

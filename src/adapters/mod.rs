@@ -266,10 +266,14 @@ pub fn classify_mcp_status(
     } else {
         match on_disk_cfg {
             ServerConfig::Local { args, .. } => {
-                if args.iter().any(|a| a.contains("dev.tailery.managed=true") || a.contains("dev.tailery.server=")) {
+                if args.iter().any(|a| {
+                    a.contains("dev.tailery.managed=true") || a.contains("dev.tailery.server=")
+                }) {
                     if state.is_server_enabled_in_active_profile(name) {
                         DiscoveredMcpStatus::ManagedEnabled
-                    } else if state.servers.contains_key(name) || state.configured_containers.contains_key(name) {
+                    } else if state.servers.contains_key(name)
+                        || state.configured_containers.contains_key(name)
+                    {
                         DiscoveredMcpStatus::ManagedDisabled
                     } else {
                         DiscoveredMcpStatus::ManagedDiff
@@ -366,13 +370,17 @@ pub trait ClientAdapter: Send + Sync + std::fmt::Debug {
         for (name, cfg) in servers {
             let status = classify_mcp_status(&name, &cfg, state);
             let transport_label = match &cfg {
-                ServerConfig::Local { transport, command, .. } => {
+                ServerConfig::Local {
+                    transport, command, ..
+                } => {
                     if command.as_deref() == Some("docker") {
                         "docker".to_string()
                     } else {
                         match transport {
                             crate::state::LocalTransport::Stdio => "stdio".to_string(),
-                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => {
+                                "streamable-http".to_string()
+                            }
                             crate::state::LocalTransport::Http { .. } => "http".to_string(),
                             crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
                         }
@@ -450,11 +458,12 @@ pub trait ClientAdapter: Send + Sync + std::fmt::Debug {
             })?;
         }
 
-        let formatted =
-            serde_json::to_string_pretty(&merged_val).map_err(|source| AdapterError::Serialization {
+        let formatted = serde_json::to_string_pretty(&merged_val).map_err(|source| {
+            AdapterError::Serialization {
                 adapter: self.name(),
                 source,
-            })?;
+            }
+        })?;
 
         std::fs::write(path, formatted).map_err(|source| AdapterError::Io {
             adapter: self.name(),

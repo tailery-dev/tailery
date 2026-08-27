@@ -5,16 +5,12 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    action::Action,
-    adapters::all_adapters,
-    components::Component,
-    state::AppState,
-    tui::Event,
+    action::Action, adapters::all_adapters, components::Component, state::AppState, tui::Event,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,7 +237,7 @@ impl StatefulWidget for &ProfileEditor {
                 };
 
                 let transport = state
-                                        .servers
+                    .servers
                     .get(name)
                     .map(|s| match s {
                         crate::state::ServerConfig::Local { transport, .. } => match transport {

@@ -92,12 +92,12 @@ impl TelemetryClient {
                     stream = UnixStream::connect(&sock_path).await.ok();
                 }
 
-                if let Some(s) = stream.as_mut() {
-                    if let Ok(serialized) = serde_json::to_string(&msg) {
-                        let line = format!("{}\n", serialized);
-                        if s.write_all(line.as_bytes()).await.is_err() {
-                            stream = None;
-                        }
+                if let Some(s) = stream.as_mut()
+                    && let Ok(serialized) = serde_json::to_string(&msg)
+                {
+                    let line = format!("{}\n", serialized);
+                    if s.write_all(line.as_bytes()).await.is_err() {
+                        stream = None;
                     }
                 }
             }
@@ -418,8 +418,16 @@ impl HttpShimInterceptor {
         socket_path: Option<&str>,
     ) -> Self {
         let telemetry = TelemetryClient::new(socket_path);
+
+        /// How long to wait for the HTTP MCP server to respond.
+        ///
+        /// 60 seconds is chosen to accommodate slow LLM responses or
+        /// complex tool executions that might be forwarded by the remote MCP.
+        /// Setting this lower might abort valid requests prematurely.
+        const HTTP_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
         let http_client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+            .timeout(HTTP_TIMEOUT)
             .build()
             .unwrap_or_default();
         Self {
@@ -596,10 +604,11 @@ async fn handle_http_proxy(State(state): State<HttpShimState>, req: Request) -> 
     );
 
     for (k, v) in &headers {
-        if k != "host" && k != "content-length" {
-            if let Ok(hv) = reqwest::header::HeaderValue::from_bytes(v.as_bytes()) {
-                forward_req = forward_req.header(k.as_str(), hv);
-            }
+        if k != "host"
+            && k != "content-length"
+            && let Ok(hv) = reqwest::header::HeaderValue::from_bytes(v.as_bytes())
+        {
+            forward_req = forward_req.header(k.as_str(), hv);
         }
     }
 
@@ -625,10 +634,10 @@ async fn handle_http_proxy(State(state): State<HttpShimState>, req: Request) -> 
     let status = StatusCode::from_u16(upstream_res.status().as_u16()).unwrap_or(StatusCode::OK);
     let mut resp_headers = HeaderMap::new();
     for (k, v) in upstream_res.headers() {
-        if let Ok(name) = axum::http::HeaderName::from_bytes(k.as_str().as_bytes()) {
-            if let Ok(val) = HeaderValue::from_bytes(v.as_bytes()) {
-                resp_headers.insert(name, val);
-            }
+        if let Ok(name) = axum::http::HeaderName::from_bytes(k.as_str().as_bytes())
+            && let Ok(val) = HeaderValue::from_bytes(v.as_bytes())
+        {
+            resp_headers.insert(name, val);
         }
     }
 

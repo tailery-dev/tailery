@@ -149,11 +149,12 @@ impl ClientAdapter for ClaudeCodeAdapter {
                 .unwrap_or_default();
 
             for (proj_path, proj_val) in projects {
-                if proj_path == &current_cwd_str || projects.len() == 1 {
-                    if let Some(proj_servers) = proj_val.get("mcpServers").and_then(|v| v.as_object()) {
-                        for (k, v) in proj_servers {
-                            all_servers_map.insert(k.clone(), v.clone());
-                        }
+                if (proj_path == &current_cwd_str || projects.len() == 1)
+                    && let Some(proj_servers) =
+                        proj_val.get("mcpServers").and_then(|v| v.as_object())
+                {
+                    for (k, v) in proj_servers {
+                        all_servers_map.insert(k.clone(), v.clone());
                     }
                 }
             }
@@ -223,11 +224,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
         Ok(result)
     }
 
-    fn extract_managed_config(
-        &self,
-        path: &Path,
-        content_json: &Value,
-    ) -> Value {
+    fn extract_managed_config(&self, path: &Path, content_json: &Value) -> Value {
         let is_mcp_json = path.file_name().and_then(|n| n.to_str()) == Some(".mcp.json");
         let mut managed = serde_json::Map::new();
 
@@ -302,7 +299,9 @@ impl ClientAdapter for ClaudeCodeAdapter {
         let is_mcp_json = path.file_name().and_then(|n| n.to_str()) == Some(".mcp.json");
 
         if let Some(root_map) = root.as_object_mut() {
-            let mut target_mcp_servers = if let Some(existing_servers) = root_map.get("mcpServers").and_then(|v| v.as_object()) {
+            let mut target_mcp_servers = if let Some(existing_servers) =
+                root_map.get("mcpServers").and_then(|v| v.as_object())
+            {
                 existing_servers.clone()
             } else {
                 serde_json::Map::new()
@@ -316,7 +315,12 @@ impl ClientAdapter for ClaudeCodeAdapter {
                 } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
                     if cmd == "docker" {
                         if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
-                            args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                            args.iter().any(|arg| {
+                                arg.as_str().is_some_and(|s| {
+                                    s.contains("dev.tailery.managed=true")
+                                        || s.contains("dev.tailery.server=")
+                                })
+                            })
                         } else {
                             false
                         }
@@ -346,19 +350,29 @@ impl ClientAdapter for ClaudeCodeAdapter {
             root_map.insert("mcpServers".to_string(), Value::Object(target_mcp_servers));
 
             // If managing ~/.claude.json and projects exists:
-            if !is_mcp_json {
-                if let Some(projects_val) = root_map.get_mut("projects").and_then(|p| p.as_object_mut()) {
-                    let current_cwd_str = std::env::current_dir()
-                        .map(|p| p.to_string_lossy().to_string())
-                        .unwrap_or_default();
+            if !is_mcp_json
+                && let Some(projects_val) =
+                    root_map.get_mut("projects").and_then(|p| p.as_object_mut())
+            {
+                let current_cwd_str = std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
 
-                    if let Some(curr_proj) = projects_val.get_mut(&current_cwd_str).and_then(|p| p.as_object_mut()) {
-                        let has_local_stdio = servers.values().any(|s| {
-                            matches!(s, ServerConfig::Local { transport: crate::state::LocalTransport::Stdio, .. })
-                        });
-                        if has_local_stdio && !curr_proj.contains_key("hasTrustDialogAccepted") {
-                            curr_proj.insert("hasTrustDialogAccepted".to_string(), Value::Bool(true));
-                        }
+                if let Some(curr_proj) = projects_val
+                    .get_mut(&current_cwd_str)
+                    .and_then(|p| p.as_object_mut())
+                {
+                    let has_local_stdio = servers.values().any(|s| {
+                        matches!(
+                            s,
+                            ServerConfig::Local {
+                                transport: crate::state::LocalTransport::Stdio,
+                                ..
+                            }
+                        )
+                    });
+                    if has_local_stdio && !curr_proj.contains_key("hasTrustDialogAccepted") {
+                        curr_proj.insert("hasTrustDialogAccepted".to_string(), Value::Bool(true));
                     }
                 }
             }
@@ -436,7 +450,8 @@ impl ClientAdapter for ClaudeCodeAdapter {
 
         // Group servers
         let mut global_servers = HashMap::new();
-        let mut global_project_servers: HashMap<String, HashMap<String, ServerConfig>> = HashMap::new();
+        let mut global_project_servers: HashMap<String, HashMap<String, ServerConfig>> =
+            HashMap::new();
         let mut in_repo_servers: HashMap<PathBuf, HashMap<String, ServerConfig>> = HashMap::new();
 
         for (name, srv) in managed_servers {
@@ -464,10 +479,11 @@ impl ClientAdapter for ClaudeCodeAdapter {
         }
 
         let existing_json: Option<serde_json::Value> = if global_path.exists() {
-            let content = std::fs::read_to_string(&global_path).map_err(|source| AdapterError::Io {
-                adapter: self.name(),
-                source,
-            })?;
+            let content =
+                std::fs::read_to_string(&global_path).map_err(|source| AdapterError::Io {
+                    adapter: self.name(),
+                    source,
+                })?;
             Some(super::parse_json_relaxed(&content))
         } else {
             None
@@ -479,44 +495,54 @@ impl ClientAdapter for ClaudeCodeAdapter {
         };
 
         // Helper to prune and merge managed servers into a target JSON object
-        let update_mcp_servers_map = |target_map: &mut serde_json::Map<String, Value>, managed_to_merge: &HashMap<String, ServerConfig>| {
-            let mut keys_to_remove = Vec::new();
-            for (k, v) in target_map.iter() {
-                let is_tailery_managed = if managed_to_merge.contains_key(k) {
-                    true
-                } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
-                    if cmd == "docker" {
-                        if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
-                            args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+        let update_mcp_servers_map =
+            |target_map: &mut serde_json::Map<String, Value>,
+             managed_to_merge: &HashMap<String, ServerConfig>| {
+                let mut keys_to_remove = Vec::new();
+                for (k, v) in target_map.iter() {
+                    let is_tailery_managed = if managed_to_merge.contains_key(k) {
+                        true
+                    } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
+                        if cmd == "docker" {
+                            if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
+                                args.iter().any(|arg| {
+                                    arg.as_str().is_some_and(|s| {
+                                        s.contains("dev.tailery.managed=true")
+                                            || s.contains("dev.tailery.server=")
+                                    })
+                                })
+                            } else {
+                                false
+                            }
                         } else {
                             false
                         }
                     } else {
                         false
+                    };
+                    if is_tailery_managed && !managed_to_merge.contains_key(k) {
+                        keys_to_remove.push(k.clone());
                     }
-                } else {
-                    false
-                };
-                if is_tailery_managed && !managed_to_merge.contains_key(k) {
-                    keys_to_remove.push(k.clone());
                 }
-            }
-            for k in keys_to_remove {
-                target_map.remove(&k);
-            }
-            
-            if let Ok(generated) = self.generate_config(managed_to_merge) {
-                if let Some(new_mcp_servers) = generated.get("mcpServers").and_then(|v| v.as_object()) {
+                for k in keys_to_remove {
+                    target_map.remove(&k);
+                }
+
+                if let Ok(generated) = self.generate_config(managed_to_merge)
+                    && let Some(new_mcp_servers) =
+                        generated.get("mcpServers").and_then(|v| v.as_object())
+                {
                     for (k, v) in new_mcp_servers {
                         target_map.insert(k.clone(), v.clone());
                     }
                 }
-            }
-        };
+            };
 
         if let Some(root_map) = root.as_object_mut() {
             // A) Update Top-Level Global mcpServers
-            let mut target_mcp_servers = if let Some(existing_servers) = root_map.get("mcpServers").and_then(|v| v.as_object()) {
+            let mut target_mcp_servers = if let Some(existing_servers) =
+                root_map.get("mcpServers").and_then(|v| v.as_object())
+            {
                 existing_servers.clone()
             } else {
                 serde_json::Map::new()
@@ -525,20 +551,26 @@ impl ClientAdapter for ClaudeCodeAdapter {
             root_map.insert("mcpServers".to_string(), Value::Object(target_mcp_servers));
 
             // B) Update $.projects["<cwd>"].mcpServers
-            let mut target_projects = if let Some(existing_projects) = root_map.get("projects").and_then(|v| v.as_object()) {
+            let mut target_projects = if let Some(existing_projects) =
+                root_map.get("projects").and_then(|v| v.as_object())
+            {
                 existing_projects.clone()
             } else {
                 serde_json::Map::new()
             };
 
             for (proj_path, proj_servers) in global_project_servers {
-                let mut proj_obj = if let Some(existing_proj) = target_projects.get(&proj_path).and_then(|v| v.as_object()) {
+                let mut proj_obj = if let Some(existing_proj) =
+                    target_projects.get(&proj_path).and_then(|v| v.as_object())
+                {
                     existing_proj.clone()
                 } else {
                     serde_json::Map::new()
                 };
 
-                let mut proj_mcp_servers = if let Some(existing_mcp_servers) = proj_obj.get("mcpServers").and_then(|v| v.as_object()) {
+                let mut proj_mcp_servers = if let Some(existing_mcp_servers) =
+                    proj_obj.get("mcpServers").and_then(|v| v.as_object())
+                {
                     existing_mcp_servers.clone()
                 } else {
                     serde_json::Map::new()
@@ -546,9 +578,15 @@ impl ClientAdapter for ClaudeCodeAdapter {
 
                 update_mcp_servers_map(&mut proj_mcp_servers, &proj_servers);
                 proj_obj.insert("mcpServers".to_string(), Value::Object(proj_mcp_servers));
-                
+
                 let has_local_stdio = proj_servers.values().any(|s| {
-                    matches!(s, ServerConfig::Local { transport: crate::state::LocalTransport::Stdio, .. })
+                    matches!(
+                        s,
+                        ServerConfig::Local {
+                            transport: crate::state::LocalTransport::Stdio,
+                            ..
+                        }
+                    )
                 });
                 if has_local_stdio && !proj_obj.contains_key("hasTrustDialogAccepted") {
                     proj_obj.insert("hasTrustDialogAccepted".to_string(), Value::Bool(true));
@@ -570,7 +608,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
         // 2. Sync In-Repo .mcp.json files
         for (ws_path, servers) in in_repo_servers {
             let proj_path = ws_path.join(".mcp.json");
-            if let Ok(_) = self.write_servers(profile, &proj_path, &servers) {
+            if self.write_servers(profile, &proj_path, &servers).is_ok() {
                 synced_count += 1;
             }
         }
@@ -654,10 +692,10 @@ pub(crate) fn parse_claude_server_entry(val: &Value) -> ServerConfig {
 }
 
 fn claude_entry_transport_label(val: &Value, cfg: &ServerConfig) -> String {
-    if let Some(cmd) = val.get("command").and_then(|c| c.as_str()) {
-        if cmd == "docker" {
-            return "docker".to_string();
-        }
+    if let Some(cmd) = val.get("command").and_then(|c| c.as_str())
+        && cmd == "docker"
+    {
+        return "docker".to_string();
     }
     match cfg {
         ServerConfig::Local { transport, .. } => match transport {
@@ -680,7 +718,7 @@ mod tests {
 
     #[test]
     fn test_claude_generate_config() {
-        let adapter = ClaudeCodeAdapter::default();
+        let adapter = ClaudeCodeAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "github-server".to_string(),
@@ -706,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_claude_generate_config_custom_container() {
-        let adapter = ClaudeCodeAdapter::default();
+        let adapter = ClaudeCodeAdapter;
         let mut servers = HashMap::new();
         servers.insert(
             "sandboxed-fs".to_string(),
@@ -754,7 +792,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_claude_read_write_roundtrip() {
-        let adapter = ClaudeCodeAdapter::default();
+        let adapter = ClaudeCodeAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -794,7 +832,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_claude_json_preserves_unmanaged_keys_and_scopes() {
-        let adapter = ClaudeCodeAdapter::default();
+        let adapter = ClaudeCodeAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -825,7 +863,11 @@ mod roundtrip_tests {
                 }
             }
         });
-        std::fs::write(&claude_json_path, serde_json::to_string_pretty(&seed).unwrap()).unwrap();
+        std::fs::write(
+            &claude_json_path,
+            serde_json::to_string_pretty(&seed).unwrap(),
+        )
+        .unwrap();
 
         // 1. Check extract_managed_config
         let managed = adapter.extract_managed_config(&claude_json_path, &seed);
@@ -835,7 +877,9 @@ mod roundtrip_tests {
         assert!(managed.get("oauthAccount").is_none());
         assert!(managed.get("telemetry").is_none());
 
-        let projects_managed = managed["projects"]["/Users/vlad.fratila/code/project-a"].as_object().unwrap();
+        let projects_managed = managed["projects"]["/Users/vlad.fratila/code/project-a"]
+            .as_object()
+            .unwrap();
         assert!(projects_managed.contains_key("mcpServers"));
         assert!(projects_managed.contains_key("disabledMcpServers"));
         assert!(projects_managed.contains_key("enabledMcpServers"));
@@ -856,7 +900,9 @@ mod roundtrip_tests {
             },
         );
 
-        adapter.write_servers("default", &claude_json_path, &servers).unwrap();
+        adapter
+            .write_servers("default", &claude_json_path, &servers)
+            .unwrap();
 
         // 3. Verify updated ~/.claude.json
         let updated_raw = std::fs::read_to_string(&claude_json_path).unwrap();
@@ -883,7 +929,7 @@ mod roundtrip_tests {
 
     #[test]
     fn test_claude_discover_mcps_and_classify_status() {
-        let adapter = ClaudeCodeAdapter::default();
+        let adapter = ClaudeCodeAdapter;
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -922,13 +968,20 @@ mod roundtrip_tests {
         std::fs::write(&path, serde_json::to_string_pretty(&seed).unwrap()).unwrap();
 
         let mut state = AppState::default();
-        state.profiles.insert("default".to_string(), crate::state::ProfileConfig::new(vec![], vec![]));
+        state.profiles.insert(
+            "default".to_string(),
+            crate::state::ProfileConfig::new(vec![], vec![]),
+        );
         // Configure demo-server as a disabled server in profile
         state.servers.insert(
             "demo-server".to_string(),
             ServerConfig::Local {
                 command: Some("docker".to_string()),
-                args: vec!["run".to_string(), "-l".to_string(), "dev.tailery.server=demo-server".to_string()],
+                args: vec![
+                    "run".to_string(),
+                    "-l".to_string(),
+                    "dev.tailery.server=demo-server".to_string(),
+                ],
                 env: HashMap::new(),
                 tool_filter: ToolFilter::default(),
                 container: crate::state::ContainerConfig::default(),
@@ -939,7 +992,10 @@ mod roundtrip_tests {
         let discovered = adapter.discover_mcps(Some(&path), &state).unwrap();
         assert_eq!(discovered.len(), 3);
 
-        let superhuman = discovered.iter().find(|m| m.name == "SuperhumanDocs").unwrap();
+        let superhuman = discovered
+            .iter()
+            .find(|m| m.name == "SuperhumanDocs")
+            .unwrap();
         assert_eq!(superhuman.scope, McpSourceScope::User);
         assert_eq!(superhuman.status, DiscoveredMcpStatus::Unmanaged);
         assert_eq!(superhuman.transport_label, "streamable-http");
@@ -950,7 +1006,10 @@ mod roundtrip_tests {
         assert_eq!(demo.transport_label, "docker");
 
         let groundcover = discovered.iter().find(|m| m.name == "groundcover").unwrap();
-        assert_eq!(groundcover.scope, McpSourceScope::Project("/Users/vlad.fratila/code/terraform".to_string()));
+        assert_eq!(
+            groundcover.scope,
+            McpSourceScope::Project("/Users/vlad.fratila/code/terraform".to_string())
+        );
         assert_eq!(groundcover.status, DiscoveredMcpStatus::Unmanaged);
 
         let _ = std::fs::remove_dir_all(temp_dir);

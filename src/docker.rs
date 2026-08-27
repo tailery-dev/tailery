@@ -145,10 +145,9 @@ pub fn is_tailery_container(
     if let Some(val) = labels
         .get(LABEL_MANAGED)
         .or_else(|| labels.get("tailery.managed"))
+        && (val == "true" || val == "1")
     {
-        if val == "true" || val == "1" {
-            return true;
-        }
+        return true;
     }
     if labels
         .keys()
@@ -258,32 +257,26 @@ pub fn get_current_docker_context_socket() -> Option<(String, PathBuf)> {
 
     // Search ~/.docker/contexts/meta/*/meta.json
     let meta_dir = home.join(".docker").join("contexts").join("meta");
-    if meta_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&meta_dir) {
-            for entry in entries.flatten() {
-                let meta_file = entry.path().join("meta.json");
-                if meta_file.exists() {
-                    if let Ok(content) = std::fs::read_to_string(&meta_file) {
-                        if let Ok(meta_json) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if meta_json.get("Name").and_then(|n| n.as_str())
-                                == Some(current_context)
-                            {
-                                if let Some(host_str) = meta_json
-                                    .get("Endpoints")
-                                    .and_then(|e| e.get("docker"))
-                                    .and_then(|d| d.get("Host"))
-                                    .and_then(|h| h.as_str())
-                                {
-                                    let clean_path = host_str.trim_start_matches("unix://");
-                                    return Some((
-                                        format!("Docker Context ({})", current_context),
-                                        PathBuf::from(clean_path),
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                }
+    if meta_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&meta_dir)
+    {
+        for entry in entries.flatten() {
+            let meta_file = entry.path().join("meta.json");
+            if meta_file.exists()
+                && let Ok(content) = std::fs::read_to_string(&meta_file)
+                && let Ok(meta_json) = serde_json::from_str::<serde_json::Value>(&content)
+                && meta_json.get("Name").and_then(|n| n.as_str()) == Some(current_context)
+                && let Some(host_str) = meta_json
+                    .get("Endpoints")
+                    .and_then(|e| e.get("docker"))
+                    .and_then(|d| d.get("Host"))
+                    .and_then(|h| h.as_str())
+            {
+                let clean_path = host_str.trim_start_matches("unix://");
+                return Some((
+                    format!("Docker Context ({})", current_context),
+                    PathBuf::from(clean_path),
+                ));
             }
         }
     }
@@ -305,20 +298,20 @@ pub fn candidate_socket_paths(
     }
 
     // 2. DOCKER_HOST or CONTAINER_HOST environment variables
-    if let Ok(host) = std::env::var("DOCKER_HOST") {
-        if host.starts_with("unix://") {
-            let path = PathBuf::from(host.trim_start_matches("unix://"));
-            let (kind, name) = identify_engine_kind(&path.to_string_lossy());
-            candidates.push((kind, format!("{} [$DOCKER_HOST]", name), path));
-        }
+    if let Ok(host) = std::env::var("DOCKER_HOST")
+        && host.starts_with("unix://")
+    {
+        let path = PathBuf::from(host.trim_start_matches("unix://"));
+        let (kind, name) = identify_engine_kind(&path.to_string_lossy());
+        candidates.push((kind, format!("{} [$DOCKER_HOST]", name), path));
     }
 
-    if let Ok(host) = std::env::var("CONTAINER_HOST") {
-        if host.starts_with("unix://") {
-            let path = PathBuf::from(host.trim_start_matches("unix://"));
-            let (kind, name) = identify_engine_kind(&path.to_string_lossy());
-            candidates.push((kind, format!("{} [$CONTAINER_HOST]", name), path));
-        }
+    if let Ok(host) = std::env::var("CONTAINER_HOST")
+        && host.starts_with("unix://")
+    {
+        let path = PathBuf::from(host.trim_start_matches("unix://"));
+        let (kind, name) = identify_engine_kind(&path.to_string_lossy());
+        candidates.push((kind, format!("{} [$CONTAINER_HOST]", name), path));
     }
 
     // 3. Active Docker Context (e.g. colima, orbstack, rootless)
@@ -343,24 +336,24 @@ pub fn candidate_socket_paths(
 
         // Scan other colima profiles under ~/.colima/*/docker.sock
         let colima_dir = home.join(".colima");
-        if colima_dir.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&colima_dir) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_dir() {
-                        let sock = p.join("docker.sock");
-                        let prof_name = p
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
-                        if prof_name != "default" && prof_name != "_wrapper" {
-                            candidates.push((
-                                ContainerEngineKind::Colima,
-                                format!("Colima ({})", prof_name),
-                                sock,
-                            ));
-                        }
+        if colima_dir.is_dir()
+            && let Ok(entries) = std::fs::read_dir(&colima_dir)
+        {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    let sock = p.join("docker.sock");
+                    let prof_name = p
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    if prof_name != "default" && prof_name != "_wrapper" {
+                        candidates.push((
+                            ContainerEngineKind::Colima,
+                            format!("Colima ({})", prof_name),
+                            sock,
+                        ));
                     }
                 }
             }
@@ -421,24 +414,24 @@ pub fn candidate_socket_paths(
             podman_machine_base.join("podman.sock"),
         ));
 
-        if podman_machine_base.is_dir() {
-            if let Ok(entries) = std::fs::read_dir(&podman_machine_base) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.is_dir() {
-                        let sock = p.join("podman.sock");
-                        let m_name = p
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
-                        if m_name != "podman-machine-default" {
-                            candidates.push((
-                                ContainerEngineKind::Podman,
-                                format!("Podman Machine ({})", m_name),
-                                sock,
-                            ));
-                        }
+        if podman_machine_base.is_dir()
+            && let Ok(entries) = std::fs::read_dir(&podman_machine_base)
+        {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_dir() {
+                    let sock = p.join("podman.sock");
+                    let m_name = p
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    if m_name != "podman-machine-default" {
+                        candidates.push((
+                            ContainerEngineKind::Podman,
+                            format!("Podman Machine ({})", m_name),
+                            sock,
+                        ));
                     }
                 }
             }
@@ -461,22 +454,22 @@ pub fn candidate_socket_paths(
     }
 
     let run_user_dir = Path::new("/run/user");
-    if run_user_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(run_user_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.is_dir() {
-                    candidates.push((
-                        ContainerEngineKind::Podman,
-                        "Podman (Linux Rootless)".to_string(),
-                        p.join("podman").join("podman.sock"),
-                    ));
-                    candidates.push((
-                        ContainerEngineKind::GenericDocker,
-                        "Docker (Linux Rootless)".to_string(),
-                        p.join("docker.sock"),
-                    ));
-                }
+    if run_user_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(run_user_dir)
+    {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_dir() {
+                candidates.push((
+                    ContainerEngineKind::Podman,
+                    "Podman (Linux Rootless)".to_string(),
+                    p.join("podman").join("podman.sock"),
+                ));
+                candidates.push((
+                    ContainerEngineKind::GenericDocker,
+                    "Docker (Linux Rootless)".to_string(),
+                    p.join("docker.sock"),
+                ));
             }
         }
     }
@@ -549,44 +542,42 @@ pub async fn detect_all_daemons(socket_override: Option<&str>) -> Vec<DetectedDa
 /// Automatically selects and connects to the primary active container daemon.
 pub async fn auto_detect_daemon(
     socket_override: Option<&str>,
-) -> (Option<DockerManager>, Option<DetectedDaemon>) {
+) -> (Option<DockerClient>, Option<DetectedDaemon>) {
     let daemons = detect_all_daemons(socket_override).await;
 
     // 1. First priority: look for an actively responding daemon
     for d in &daemons {
-        if d.is_running {
-            if let Ok(client) =
+        if d.is_running
+            && let Ok(client) =
                 Docker::connect_with_unix(&d.socket_path, 120, bollard::API_DEFAULT_VERSION)
+        {
+            let mut info = d.clone();
+            // Query version to enhance display name
+            if let Ok(ver) = client.version().await
+                && let Some(v_str) = ver.version
             {
-                let mut info = d.clone();
-                // Query version to enhance display name
-                if let Ok(ver) = client.version().await {
-                    if let Some(v_str) = ver.version {
-                        info.name = format!("{} (v{})", info.name, v_str);
-                    }
-                }
-                let manager = DockerManager {
-                    client,
-                    socket_path: Some(d.socket_path.clone()),
-                    daemon_info: Some(info.clone()),
-                };
-                return (Some(manager), Some(info));
+                info.name = format!("{} (v{})", info.name, v_str);
             }
+            let manager = DockerClient {
+                client,
+                socket_path: Some(d.socket_path.clone()),
+                daemon_info: Some(info.clone()),
+            };
+            return (Some(manager), Some(info));
         }
     }
 
     // 2. Second priority: return the first detected existing socket for reporting
-    if let Some(first) = daemons.first() {
-        if let Ok(client) =
+    if let Some(first) = daemons.first()
+        && let Ok(client) =
             Docker::connect_with_unix(&first.socket_path, 120, bollard::API_DEFAULT_VERSION)
-        {
-            let manager = DockerManager {
-                client,
-                socket_path: Some(first.socket_path.clone()),
-                daemon_info: Some(first.clone()),
-            };
-            return (Some(manager), Some(first.clone()));
-        }
+    {
+        let manager = DockerClient {
+            client,
+            socket_path: Some(first.socket_path.clone()),
+            daemon_info: Some(first.clone()),
+        };
+        return (Some(manager), Some(first.clone()));
     }
 
     // 3. Fallback: standard local defaults
@@ -598,7 +589,7 @@ pub async fn auto_detect_daemon(
             socket_path: "/var/run/docker.sock".to_string(),
             is_running: false,
         };
-        let manager = DockerManager {
+        let manager = DockerClient {
             client,
             socket_path: Some("/var/run/docker.sock".to_string()),
             daemon_info: Some(default_daemon.clone()),
@@ -784,15 +775,15 @@ pub fn parse_docker_run_command(cmd_line: &str) -> Result<ParsedDockerRun, Docke
 
 #[derive(Clone)]
 #[allow(dead_code)]
-pub struct DockerManager {
+pub struct DockerClient {
     client: Docker,
     socket_path: Option<String>,
     daemon_info: Option<DetectedDaemon>,
 }
 
 #[allow(dead_code)]
-impl DockerManager {
-    /// Create a new DockerManager using basic connection or socket override.
+impl DockerClient {
+    /// Create a new DockerClient using basic connection or socket override.
     pub fn new(socket_override: Option<&str>) -> Result<Self, DockerError> {
         let (client, socket_path) = if let Some(sock) = socket_override {
             (
@@ -886,10 +877,10 @@ impl DockerManager {
 
     /// Locate the host binary to bind-mount into containers (defaults to current executable).
     pub fn resolve_host_binary(custom_path: Option<&Path>) -> Result<PathBuf, DockerError> {
-        if let Some(p) = custom_path {
-            if p.exists() {
-                return Ok(p.to_path_buf());
-            }
+        if let Some(p) = custom_path
+            && p.exists()
+        {
+            return Ok(p.to_path_buf());
         }
         std::env::current_exe().map_err(|e| {
             DockerError::BinaryResolution(format!(
@@ -918,16 +909,16 @@ impl DockerManager {
         }
 
         // 2. Bind mount the host binary (e.g. tailery / swbd shim) into /usr/local/bin/tailery-shim
-        if let Some(binary) = host_binary {
-            if binary.exists() {
-                mounts.push(Mount {
-                    target: Some("/usr/local/bin/tailery-shim".to_string()),
-                    source: Some(binary.to_string_lossy().to_string()),
-                    typ: Some(MountTypeEnum::BIND),
-                    read_only: Some(true),
-                    ..Default::default()
-                });
-            }
+        if let Some(binary) = host_binary
+            && binary.exists()
+        {
+            mounts.push(Mount {
+                target: Some("/usr/local/bin/tailery-shim".to_string()),
+                source: Some(binary.to_string_lossy().to_string()),
+                typ: Some(MountTypeEnum::BIND),
+                read_only: Some(true),
+                ..Default::default()
+            });
         }
 
         // 3. Port Bindings
@@ -1365,14 +1356,14 @@ impl DockerManager {
                 .unwrap_or(false);
 
         let mut ports = Vec::new();
-        if let Some(network_settings) = inspect.network_settings {
-            if let Some(port_map) = network_settings.ports {
-                for (container_p, host_bindings) in port_map {
-                    if let Some(bindings) = host_bindings {
-                        for b in bindings {
-                            if let Some(hp) = b.host_port {
-                                ports.push(format!("{}:{}", hp, container_p));
-                            }
+        if let Some(network_settings) = inspect.network_settings
+            && let Some(port_map) = network_settings.ports
+        {
+            for (container_p, host_bindings) in port_map {
+                if let Some(bindings) = host_bindings {
+                    for b in bindings {
+                        if let Some(hp) = b.host_port {
+                            ports.push(format!("{}:{}", hp, container_p));
                         }
                     }
                 }
@@ -1503,7 +1494,7 @@ mod tests {
             auto_start: false,
         };
 
-        let host_config = DockerManager::build_host_config(&config, None).unwrap();
+        let host_config = DockerClient::build_host_config(&config, None).unwrap();
         assert_eq!(host_config.readonly_rootfs, Some(true));
         assert_eq!(host_config.network_mode, Some("bridge".to_string()));
         assert_eq!(host_config.memory, Some(512 * 1024 * 1024));
@@ -1523,10 +1514,7 @@ mod tests {
             assert!(!info.socket_path.is_empty());
         }
         if let Some(mgr) = &docker_mgr {
-            println!(
-                "==> Connected to Docker Manager at: {:?}",
-                mgr.socket_path()
-            );
+            println!("==> Connected to Docker Client at: {:?}", mgr.socket_path());
             assert!(mgr.socket_path().is_some());
         }
     }

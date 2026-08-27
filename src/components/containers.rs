@@ -3,13 +3,13 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 
 use crate::action::Action;
 use crate::components::Component;
-use crate::tui::Event;
 use crate::state::AppState;
+use crate::tui::Event;
 
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
 pub enum ContainerFilterMode {
@@ -25,7 +25,10 @@ pub struct Containers {
 }
 
 impl Component for Containers {
-    fn register_action_handler(&mut self, _tx: tokio::sync::mpsc::UnboundedSender<Action>) -> color_eyre::Result<()> {
+    fn register_action_handler(
+        &mut self,
+        _tx: tokio::sync::mpsc::UnboundedSender<Action>,
+    ) -> color_eyre::Result<()> {
         Ok(())
     }
 
@@ -62,29 +65,24 @@ impl StatefulWidget for &Containers {
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(55),
-                Constraint::Percentage(45),
-            ])
+            .constraints([Constraint::Percentage(55), Constraint::Percentage(45)])
             .split(area);
 
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(58),
-                Constraint::Percentage(42),
-            ])
+            .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
             .split(main_chunks[0]);
 
         let containers = &state.containers;
         // In the old code, containers were filtered before being passed to the widget.
         // We'll filter them here based on the filter mode.
-        let filtered_containers: Vec<_> = containers.iter().filter(|c| {
-            match self.filter_mode {
+        let filtered_containers: Vec<_> = containers
+            .iter()
+            .filter(|c| match self.filter_mode {
                 ContainerFilterMode::ManagedOnly => c.is_managed,
                 ContainerFilterMode::All => true,
-            }
-        }).collect();
+            })
+            .collect();
 
         // Clamp selected index
         let clamped_index = if filtered_containers.is_empty() {
@@ -92,7 +90,7 @@ impl StatefulWidget for &Containers {
         } else {
             self.selected_index.min(filtered_containers.len() - 1)
         };
-        
+
         let selected_container = filtered_containers.get(clamped_index).copied();
         let daemon_online = state.docker_status.contains("Online");
 
@@ -160,10 +158,9 @@ impl StatefulWidget for &Containers {
                 "Filter: Managed Only ({} shown) │ [f] All",
                 filtered_containers.len()
             ),
-            ContainerFilterMode::All => format!(
-                "Filter: All ({} total) │ [f] Filter",
-                containers.len()
-            ),
+            ContainerFilterMode::All => {
+                format!("Filter: All ({} total) │ [f] Filter", containers.len())
+            }
         };
 
         let table_title = format!(
@@ -202,7 +199,9 @@ impl StatefulWidget for &Containers {
         );
         ratatui::widgets::Widget::render(table, top_chunks[0], buf);
 
-        let config_path = crate::state::resolve_config_path(None).to_string_lossy().to_string();
+        let config_path = crate::state::resolve_config_path(None)
+            .to_string_lossy()
+            .to_string();
 
         let detail_lines = if let Some(c) = selected_container {
             let (status_text, status_color) = if c.running {
@@ -362,7 +361,11 @@ impl StatefulWidget for &Containers {
                     .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
             ));
-        ratatui::widgets::Widget::render(Paragraph::new(detail_lines).block(detail_block), top_chunks[1], buf);
+        ratatui::widgets::Widget::render(
+            Paragraph::new(detail_lines).block(detail_block),
+            top_chunks[1],
+            buf,
+        );
 
         let selected_name = selected_container
             .map(|c| c.name.as_str())
@@ -426,6 +429,10 @@ impl StatefulWidget for &Containers {
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             ));
-        ratatui::widgets::Widget::render(Paragraph::new(log_lines).block(logs_block), main_chunks[1], buf);
+        ratatui::widgets::Widget::render(
+            Paragraph::new(log_lines).block(logs_block),
+            main_chunks[1],
+            buf,
+        );
     }
 }

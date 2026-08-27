@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Tabs, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, StatefulWidget, Tabs},
 };
 use similar::{ChangeTag, TextDiff};
 
@@ -138,9 +138,10 @@ impl StatefulWidget for &DiffViewer {
             })
             .unwrap_or_default();
 
-        let backup_count = crate::backup::list_backups(Some(active_profile), Some(current_adapter.name()))
-            .map(|b| b.len())
-            .unwrap_or(0);
+        let backup_count =
+            crate::backup::list_backups(Some(active_profile), Some(current_adapter.name()))
+                .map(|b| b.len())
+                .unwrap_or(0);
 
         let header_lines = vec![Line::from(vec![
             Span::styled("Config Target: ", Style::default().fg(Color::DarkGray)),
@@ -185,8 +186,18 @@ impl StatefulWidget for &DiffViewer {
         } else if on_disk_content.trim().is_empty() {
             for line in generated_json.lines() {
                 diff_lines.push(Line::from(vec![
-                    Span::styled("+ ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
-                    Span::styled(line, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled(
+                        "+ ",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        line,
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
                 ]));
             }
         } else if generated_json.trim().is_empty() {
@@ -229,7 +240,7 @@ impl StatefulWidget for &DiffViewer {
                     .fg(Color::Magenta)
                     .add_modifier(Modifier::BOLD),
             ));
-        
+
         Paragraph::new(diff_lines)
             .block(diff_block)
             .scroll((self.scroll_offset as u16, 0))

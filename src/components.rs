@@ -3,28 +3,24 @@ use crossterm::event::{KeyEvent, MouseEvent};
 use ratatui::layout::Rect;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{
-    action::Action,
-    config::Config,
-    tui::Event,
-};
+use crate::{action::Action, config::Config, tui::Event};
 
-pub mod home;
-pub mod sidebar;
 pub mod clients;
-pub mod mcps;
 pub mod containers;
-pub mod skills;
-pub mod mcp_browser;
-pub mod profile_switcher;
-pub mod profile_editor;
-pub mod wizard;
 pub mod diff_viewer;
-pub mod inspector;
-pub mod server_browser;
 pub mod greeting;
 pub mod help;
+pub mod home;
+pub mod inspector;
+pub mod mcp_browser;
+pub mod mcps;
+pub mod profile_editor;
+pub mod profile_switcher;
+pub mod server_browser;
+pub mod sidebar;
+pub mod skills;
 pub mod sync_confirm;
+pub mod wizard;
 
 /// `Component` is a trait that represents a visual and interactive element of the user interface.
 /// Implementors of this trait can be registered with the main application loop and will be able to receive events,

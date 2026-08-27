@@ -5,7 +5,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 
 use crate::action::Action;
@@ -176,8 +176,16 @@ impl StatefulWidget for &SyncConfirm {
 
         // 3. Safety Notice
         let safety_line = Line::from(vec![
-            Span::styled("Safety: ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::styled("Automatic backups are created before writing (up to 10 rolling backups retained per profile-client pair in XDG storage).", Style::default().fg(Color::DarkGray)),
+            Span::styled(
+                "Safety: ",
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "Automatic backups are created before writing (up to 10 rolling backups retained per profile-client pair in XDG storage).",
+                Style::default().fg(Color::DarkGray),
+            ),
         ]);
         Paragraph::new(vec![safety_line]).render(main_chunks[2], buf);
 
