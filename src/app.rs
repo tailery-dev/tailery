@@ -1,3 +1,4 @@
+use crate::adapters::ClientAdapter;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::prelude::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -346,7 +347,7 @@ impl App {
             ContainerFilterMode::ManagedOnly
         };
 
-        Ok(Self {
+        let mut app = Self {
             tick_rate,
             frame_rate,
             should_quit: false,
@@ -393,7 +394,9 @@ impl App {
             greeting: Greeting::default(),
             help: Help::default(),
             sync_confirm: SyncConfirm::default(),
-        })
+        };
+        app.rebuild_managed_servers();
+        Ok(app)
     }
 
     pub fn trigger_diff_recompute(&mut self, adapter_index: usize) {
@@ -563,6 +566,95 @@ impl App {
         self.active_modal = ActiveModal::Help;
     }
 
+
+    pub fn rebuild_managed_servers(&mut self) {
+        let mut managed = std::collections::HashMap::new();
+
+        for (name, cfg) in &self.app_state.servers {
+            managed.insert(
+                name.clone(),
+                crate::state::ManagedServer {
+                    name: name.clone(),
+                    config: cfg.clone(),
+                    is_global: true,
+                    in_repo_paths: vec![],
+                    client_global_project_paths: vec![],
+                },
+            );
+        }
+
+        let active_prof = self.app_state.settings.active_profile.clone();
+        if let Some(prof) = self.app_state.profiles.get(&active_prof) {
+            if prof.include_project_mcps {
+                let projects = crate::scanner::find_projects(&prof.project_search_paths, 3);
+                
+                for proj_path in projects {
+                    let mut found_servers = std::collections::HashMap::new();
+
+                    for adapter in crate::adapters::all_adapters() {
+                        if let Ok(path) = adapter.config_path(Some(&proj_path)) {
+                            if path.exists() {
+                                if let Ok(servers) = adapter.read_servers(&path) {
+                                    for (name, cfg) in servers {
+                                        found_servers.insert(name, (cfg, true)); 
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    let claude_adapter = crate::adapters::claude_code::ClaudeCodeAdapter;
+                    if let Ok(global_claude_path) = claude_adapter.config_path(None) {
+                        if global_claude_path.exists() {
+                            if let Ok(content) = std::fs::read_to_string(&global_claude_path) {
+                                let root: serde_json::Value = crate::adapters::parse_json_relaxed(&content);
+                                if let Some(projects_map) = root.get("projects").and_then(|v| v.as_object()) {
+                                    let proj_str = proj_path.to_string_lossy().to_string();
+                                    if let Some(proj_data) = projects_map.get(&proj_str) {
+                                        if let Some(mcp_servers) = proj_data.get("mcpServers").and_then(|v| v.as_object()) {
+                                            for (k, v) in mcp_servers {
+                                                if !found_servers.contains_key(k) {
+                                                    let cfg = crate::adapters::claude_code::parse_claude_server_entry(v);
+                                                    found_servers.insert(k.clone(), (cfg, false));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    for (name, (cfg, is_in_repo)) in found_servers {
+                        if managed.contains_key(&name) && managed.get(&name).unwrap().is_global {
+                            continue;
+                        }
+
+                        let entry = managed.entry(name.clone()).or_insert_with(|| crate::state::ManagedServer {
+                            name: name.clone(),
+                            config: cfg,
+                            is_global: false,
+                            in_repo_paths: vec![],
+                            client_global_project_paths: vec![],
+                        });
+
+                        if is_in_repo {
+                            if !entry.in_repo_paths.contains(&proj_path) {
+                                entry.in_repo_paths.push(proj_path.clone());
+                            }
+                        } else {
+                            if !entry.client_global_project_paths.contains(&proj_path) {
+                                entry.client_global_project_paths.push(proj_path.clone());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        self.app_state.managed_servers = managed;
+    }
+
     pub fn switch_profile(&mut self, profile_name: &str) {
         self.app_state.settings.active_profile = profile_name.to_string();
         self.save_config();
@@ -642,7 +734,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
             let is_enabled = profile.toggle_client(client_name);
             self.save_config();
             if is_enabled {
@@ -672,7 +764,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
             profile.disable_client(client_name);
             self.save_config();
             self.set_status(format!(
@@ -694,7 +786,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
             let is_enabled = profile.toggle_server(&name);
             self.save_config();
             if is_enabled {

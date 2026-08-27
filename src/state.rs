@@ -223,6 +223,8 @@ pub struct ProfileConfig {
     pub enabled_clients: Vec<String>,
     #[serde(default)]
     pub include_project_mcps: bool,
+    #[serde(default)]
+    pub project_search_paths: Vec<String>,
 }
 
 impl Default for ProfileConfig {
@@ -231,6 +233,7 @@ impl Default for ProfileConfig {
             enabled_servers: Vec::new(),
             enabled_clients: default_enabled_clients(),
             include_project_mcps: false,
+            project_search_paths: Vec::new(),
         }
     }
 }
@@ -241,6 +244,7 @@ impl ProfileConfig {
             enabled_servers,
             enabled_clients,
             include_project_mcps: false,
+            project_search_paths: Vec::new(),
         }
     }
 
@@ -249,6 +253,7 @@ impl ProfileConfig {
             enabled_servers,
             enabled_clients: default_enabled_clients(),
             include_project_mcps: false,
+            project_search_paths: Vec::new(),
         }
     }
 

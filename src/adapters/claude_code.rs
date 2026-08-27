@@ -589,7 +589,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
     }
 }
 
-fn parse_claude_server_entry(val: &Value) -> ServerConfig {
+pub(crate) fn parse_claude_server_entry(val: &Value) -> ServerConfig {
     if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
         let args = val
             .get("args")
