@@ -38,6 +38,17 @@ pub struct AnsweredStep {
 // New Profile Wizard
 // -----------------------------------------------------------------------------
 
+
+#[derive(Debug, Clone)]
+pub struct NewProfileResult {
+    pub name: String,
+    pub enabled_clients: Vec<String>,
+    pub copy_servers: bool,
+    pub import_clients: bool,
+    pub project_search_paths: Vec<String>,
+    pub activate_now: bool,
+}
+
 pub fn parse_client_selection(input: &str) -> Vec<String> {
     let trimmed = input.trim().to_lowercase();
     if trimmed.is_empty() || trimmed == "all" || trimmed == "*" {
@@ -132,6 +143,18 @@ impl NewProfileWizard {
                 options: vec!["y (Yes)".to_string(), "n (No)".to_string()],
             },
             3 => PromptStep {
+                question: "Import global configurations from enabled clients?".to_string(),
+                hint: Some("y = scan and import existing servers, n = skip".to_string()),
+                default_value: Some("y".to_string()),
+                options: vec!["y (Yes)".to_string(), "n (No)".to_string()],
+            },
+            4 => PromptStep {
+                question: "Auto-discover per-project MCPs in these paths?".to_string(),
+                hint: Some("e.g. ~/code, ~/projects (comma separated)".to_string()),
+                default_value: Some("".to_string()),
+                options: vec![],
+            },
+            5 => PromptStep {
                 question: "Switch to this new profile immediately?".to_string(),
                 hint: Some("y = activate right away, n = stay on current profile".to_string()),
                 default_value: Some("y".to_string()),
@@ -177,7 +200,7 @@ impl NewProfileWizard {
         }
     }
 
-    pub fn submit(&mut self) -> Option<(String, Vec<String>, bool, bool)> {
+    pub fn submit(&mut self) -> Option<NewProfileResult> {
         let prompt = self.current_prompt();
         let value = if self.input_buffer.trim().is_empty() {
             prompt.default_value.clone().unwrap_or_default()
@@ -196,12 +219,21 @@ impl NewProfileWizard {
         self.input_buffer.clear();
         self.current_step += 1;
 
-        if self.current_step >= 4 {
+        if self.current_step >= 6 {
             let name = self.history[0].answer.clone();
             let enabled_clients = parse_client_selection(&self.history[1].answer);
             let copy_servers = self.history[2].answer.to_lowercase().starts_with('y');
-            let activate_now = self.history[3].answer.to_lowercase().starts_with('y');
-            Some((name, enabled_clients, copy_servers, activate_now))
+            let import_clients = self.history[3].answer.to_lowercase().starts_with('y');
+            let search_paths = self.history[4].answer.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            let activate_now = self.history[5].answer.to_lowercase().starts_with('y');
+            Some(NewProfileResult {
+                name,
+                enabled_clients,
+                copy_servers,
+                import_clients,
+                project_search_paths: search_paths,
+                activate_now,
+            })
         } else {
             None
         }
@@ -1063,25 +1095,38 @@ mod tests {
         wizard.handle_char('o');
         wizard.handle_char('r');
         wizard.handle_char('k');
-        assert_eq!(wizard.submit(), None);
+        assert!(wizard.submit().is_none());
 
         // Step 1: Enabled clients (type "1,2" -> zed, antigravity)
         wizard.handle_char('1');
         wizard.handle_char(',');
         wizard.handle_char('2');
-        assert_eq!(wizard.submit(), None);
+        assert!(wizard.submit().is_none());
 
         // Step 2: Copy servers (default 'y')
-        assert_eq!(wizard.submit(), None);
+        assert!(wizard.submit().is_none());
 
-        // Step 3: Activate now (default 'y')
+        // Step 3: Import configs (default 'y')
+        assert!(wizard.submit().is_none());
+        
+        // Step 4: Auto discover paths (type "/code")
+        wizard.handle_char('/');
+        wizard.handle_char('c');
+        wizard.handle_char('o');
+        wizard.handle_char('d');
+        wizard.handle_char('e');
+        assert!(wizard.submit().is_none());
+
+        // Step 5: Activate now (default 'y')
         let result = wizard.submit();
         assert!(result.is_some());
-        let (name, enabled_clients, copy_servers, activate_now) = result.unwrap();
-        assert_eq!(name, "work");
-        assert_eq!(enabled_clients, vec!["zed", "antigravity"]);
-        assert!(copy_servers);
-        assert!(activate_now);
+        let res = result.unwrap();
+        assert_eq!(res.name, "work");
+        assert_eq!(res.enabled_clients, vec!["zed", "antigravity"]);
+        assert!(res.copy_servers);
+        assert!(res.import_clients);
+        assert_eq!(res.project_search_paths, vec!["/code".to_string()]);
+        assert!(res.activate_now);
     }
 
     #[test]

@@ -1407,8 +1407,8 @@ impl App {
                             w.handle_char(c);
                         }
                         KeyCode::Enter => {
-                            if let Some((name, enabled_clients, copy_servers, activate_now)) = w.submit() {
-                                let enabled_servers = if copy_servers {
+                            if let Some(res) = w.submit() {
+                                let mut enabled_servers = if res.copy_servers {
                                     let curr = &self.app_state.settings.active_profile;
                                     self.app_state
                                         .profiles
@@ -1419,18 +1419,47 @@ impl App {
                                     Vec::new()
                                 };
 
+                                let include_project_mcps = !res.project_search_paths.is_empty();
+
+                                if res.import_clients {
+                                    for cli in &res.enabled_clients {
+                                        for adapter in crate::adapters::all_adapters() {
+                                            if adapter.name() == cli {
+                                                if let Ok(path) = adapter.config_path(None) {
+                                                    if path.exists() {
+                                                        if let Ok(servers) = adapter.read_servers(&path) {
+                                                            for (srv_name, cfg) in servers {
+                                                                if !self.app_state.servers.contains_key(&srv_name) {
+                                                                    self.app_state.servers.insert(srv_name.clone(), cfg);
+                                                                }
+                                                                if !enabled_servers.contains(&srv_name) {
+                                                                    enabled_servers.push(srv_name);
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                let mut new_prof = ProfileConfig::new(enabled_servers, res.enabled_clients);
+                                new_prof.include_project_mcps = include_project_mcps;
+                                new_prof.project_search_paths = res.project_search_paths;
+
                                 self.app_state.profiles.insert(
-                                    name.clone(),
-                                    ProfileConfig::new(enabled_servers, enabled_clients),
+                                    res.name.clone(),
+                                    new_prof,
                                 );
 
-                                if activate_now {
-                                    self.app_state.settings.active_profile = name.clone();
+                                if res.activate_now {
+                                    self.switch_profile(&res.name);
                                 }
 
                                 self.save_config();
                                 self.active_modal = ActiveModal::None;
-                                self.set_status(format!("✔ Saved & created profile '{}'!", name));
+                                self.set_status(format!("✔ Saved & created profile '{}'!", res.name));
                             }
                         }
                         _ => {}

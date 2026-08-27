@@ -630,6 +630,7 @@ mod tests {
                 enabled_servers: vec!["web-search".to_string()],
                 enabled_clients: vec!["zed".to_string()],
                 include_project_mcps: true,
+                project_search_paths: Vec::new(),
             },
         );
 
