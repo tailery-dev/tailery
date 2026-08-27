@@ -10,6 +10,7 @@ use crate::state::{ServerConfig, ToolFilter};
 pub struct AntigravityAdapter;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 struct AntigravityMcpFile {
     #[serde(rename = "mcpServers", default)]
     mcp_servers: HashMap<String, Value>,
@@ -115,72 +116,188 @@ impl ClientAdapter for AntigravityAdapter {
             adapter: self.name(),
             source,
         })?;
-        let parsed: AntigravityMcpFile =
-            serde_json::from_str(&content).map_err(|source| AdapterError::Serialization {
-                adapter: self.name(),
-                source,
-            })?;
+        let root: Value = super::parse_json_relaxed(&content);
 
         let mut result = HashMap::new();
-        for (name, val) in parsed.mcp_servers {
-            if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
-                let args = val
-                    .get("args")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|s| s.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let env = val
-                    .get("env")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| {
-                        obj.iter()
-                            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                result.insert(
-                    name,
-                    ServerConfig::Local {
-                        command: Some(cmd.to_string()),
-                        args,
-                        env,
-                        tool_filter: ToolFilter::default(),
-                        container: crate::state::ContainerConfig::default(),
-                        transport: crate::state::LocalTransport::Stdio,
-                    },
-                );
-            } else if let Some(url) = val
-                .get("serverUrl")
-                .or_else(|| val.get("url"))
-                .and_then(|v| v.as_str())
-            {
-                let headers = val
-                    .get("headers")
-                    .and_then(|v| v.as_object())
-                    .map(|obj| {
-                        obj.iter()
-                            .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                result.insert(
-                    name,
-                    ServerConfig::Remote {
-                        url: url.to_string(),
-                        headers,
-                        env: HashMap::new(),
-                        transport: crate::state::RemoteTransport::StreamableHttp,
-                        tool_filter: ToolFilter::default(),
-                        shim_port: None,
-                    },
-                );
+        if let Some(mcp_servers) = root.get("mcpServers").and_then(|v| v.as_object()) {
+            for (name, val) in mcp_servers {
+                if let Some(cmd) = val.get("command").and_then(|v| v.as_str()) {
+                    let args = val
+                        .get("args")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|s| s.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let env = val
+                        .get("env")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            obj.iter()
+                                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    result.insert(
+                        name.clone(),
+                        ServerConfig::Local {
+                            command: Some(cmd.to_string()),
+                            args,
+                            env,
+                            tool_filter: ToolFilter::default(),
+                            container: crate::state::ContainerConfig::default(),
+                            transport: crate::state::LocalTransport::Stdio,
+                        },
+                    );
+                } else if let Some(url) = val
+                    .get("serverUrl")
+                    .or_else(|| val.get("url"))
+                    .and_then(|v| v.as_str())
+                {
+                    let headers = val
+                        .get("headers")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            obj.iter()
+                                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    result.insert(
+                        name.clone(),
+                        ServerConfig::Remote {
+                            url: url.to_string(),
+                            headers,
+                            env: HashMap::new(),
+                            transport: crate::state::RemoteTransport::StreamableHttp,
+                            tool_filter: ToolFilter::default(),
+                            shim_port: None,
+                        },
+                    );
+                }
             }
         }
         Ok(result)
+    }
+
+    fn extract_managed_config(
+        &self,
+        _path: &Path,
+        content_json: &Value,
+    ) -> Value {
+        let mut managed = serde_json::Map::new();
+        let servers = content_json
+            .get("mcpServers")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        managed.insert("mcpServers".to_string(), servers);
+        Value::Object(managed)
+    }
+
+    fn merge_managed_config(
+        &self,
+        _path: &Path,
+        existing_json: Option<&Value>,
+        servers: &HashMap<String, ServerConfig>,
+    ) -> Result<Value, AdapterError> {
+        let generated = self.generate_config(servers)?;
+        let mut root = match existing_json {
+            Some(Value::Object(map)) => Value::Object(map.clone()),
+            _ => json!({}),
+        };
+
+        if let Some(root_map) = root.as_object_mut() {
+            let mut target_servers = if let Some(existing_servers) = root_map.get("mcpServers").and_then(|v| v.as_object()) {
+                existing_servers.clone()
+            } else {
+                serde_json::Map::new()
+            };
+
+            let mut keys_to_remove = Vec::new();
+            for (k, v) in &target_servers {
+                let is_tailery_managed = if servers.contains_key(k) {
+                    true
+                } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
+                    if cmd == "docker" {
+                        if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
+                            args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if is_tailery_managed && !servers.contains_key(k) {
+                    keys_to_remove.push(k.clone());
+                }
+            }
+
+            for k in keys_to_remove {
+                target_servers.remove(&k);
+            }
+
+            if let Some(new_servers) = generated.get("mcpServers").and_then(|v| v.as_object()) {
+                for (k, v) in new_servers {
+                    target_servers.insert(k.clone(), v.clone());
+                }
+            }
+
+            root_map.insert("mcpServers".to_string(), Value::Object(target_servers));
+        }
+
+        Ok(root)
+    }
+
+    fn discover_mcps(
+        &self,
+        path: Option<&Path>,
+        state: &crate::state::AppState,
+    ) -> Result<Vec<super::DiscoveredMcp>, AdapterError> {
+        let Some(p) = path else {
+            return Ok(Vec::new());
+        };
+        if !p.exists() {
+            return Ok(Vec::new());
+        }
+        let servers = self.read_servers(p)?;
+        let mut discovered = Vec::new();
+        for (name, cfg) in servers {
+            let status = super::classify_mcp_status(&name, &cfg, state);
+            let transport_label = match &cfg {
+                ServerConfig::Local { transport, command, .. } => {
+                    if command.as_deref() == Some("docker") {
+                        "docker".to_string()
+                    } else {
+                        match transport {
+                            crate::state::LocalTransport::Stdio => "stdio".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::Http { .. } => "http".to_string(),
+                            crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
+                        }
+                    }
+                }
+                ServerConfig::Remote { transport, .. } => match transport {
+                    crate::state::RemoteTransport::StreamableHttp => "streamable-http".to_string(),
+                    crate::state::RemoteTransport::Http => "http".to_string(),
+                    crate::state::RemoteTransport::Sse => "sse".to_string(),
+                },
+            };
+            discovered.push(super::DiscoveredMcp {
+                name,
+                scope: super::McpSourceScope::User,
+                config: cfg,
+                status,
+                transport_label,
+                raw_json: serde_json::json!({}),
+            });
+        }
+        Ok(discovered)
     }
 
     fn detect_installed(&self) -> bool {
@@ -265,6 +382,7 @@ mod tests {
                     ports: vec![],
                     network: "none".to_string(),
                     resources: None,
+                    auto_start: false,
                 },
                 env: HashMap::new(),
                 tool_filter: ToolFilter::default(),
@@ -303,6 +421,8 @@ mod tests {
                 )]),
                 env: HashMap::new(),
                 transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: ToolFilter::default(),
             },
         );
 
@@ -354,6 +474,8 @@ mod roundtrip_tests {
                 headers: HashMap::from([("X-Custom".to_string(), "val".to_string())]),
                 env: HashMap::new(),
                 transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: ToolFilter::default(),
             },
         );
 
@@ -377,6 +499,62 @@ mod roundtrip_tests {
         } else {
             panic!("Expected Remote server config");
         }
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_antigravity_preserves_unmanaged_keys_and_diff_extract() {
+        let adapter = AntigravityAdapter::default();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("tailery_test_antigravity_preserve_{}", nanos));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let path = temp_dir.join("mcp_config.json");
+
+        // Seed with existing user settings
+        let seed = json!({
+            "model_preferences": { "default": "gemini-1.5-pro" },
+            "telemetry_enabled": false,
+            "mcpServers": {
+                "old_server": {
+                    "serverUrl": "http://old.test"
+                }
+            }
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&seed).unwrap()).unwrap();
+
+        // Check extract_managed_config only extracts mcpServers
+        let managed = adapter.extract_managed_config(&path, &seed);
+        assert!(managed.get("mcpServers").is_some());
+        assert!(managed.get("model_preferences").is_none());
+        assert!(managed.get("telemetry_enabled").is_none());
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "new_server".to_string(),
+            ServerConfig::Remote {
+                url: "http://new.test".to_string(),
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: ToolFilter::default(),
+            },
+        );
+
+        adapter.write_servers("default", &path, &servers).unwrap();
+
+        let updated_raw = std::fs::read_to_string(&path).unwrap();
+        let updated: Value = serde_json::from_str(&updated_raw).unwrap();
+
+        // Verify unmanaged keys are preserved intact!
+        assert_eq!(updated["model_preferences"]["default"], "gemini-1.5-pro");
+        assert_eq!(updated["telemetry_enabled"], false);
+        assert!(updated["mcpServers"]["new_server"].is_object());
+        assert!(updated["mcpServers"]["old_server"].is_object());
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }

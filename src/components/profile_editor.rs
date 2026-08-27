@@ -128,6 +128,11 @@ impl StatefulWidget for &ProfileEditor {
             .split(inner);
 
         let mut sorted_server_names: Vec<String> = state.servers.keys().cloned().collect();
+        for k in state.configured_containers.keys() {
+            if !sorted_server_names.contains(k) {
+                sorted_server_names.push(k.clone());
+            }
+        }
         sorted_server_names.sort();
 
         let profile_cfg = state.profiles.get(&self.profile_name);

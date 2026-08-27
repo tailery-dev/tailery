@@ -7,7 +7,7 @@ use crate::adapters::all_adapters;
 use crate::app::App;
 use crate::shim::{HttpShimInterceptor, ShimInterceptor};
 use crate::state::{
-    AppState, ContainerConfig, GlobalSettings, MountConfig, PortMapping, ProfileConfig,
+    AppState, ContainerConfig, GlobalSettings, MountConfig, ProfileConfig,
     ResourceLimits, ServerConfig, ToolFilter, resolve_config_path, save_config_to_path,
 };
 
@@ -138,6 +138,7 @@ fn load_or_create_config(path_override: Option<&Path>) -> (AppState, PathBuf) {
             filter_managed_containers_only: Some(true),
         },
         servers,
+        configured_containers: HashMap::new(),
         profiles,
         workspaces: HashMap::new(),
         docker_status: String::new(),
@@ -647,9 +648,19 @@ async fn main() -> color_eyre::Result<()> {
             }
 
             println!("\nMCP Servers:");
-            println!("{:<24} {:<18} {:<12}", "SERVER NAME", "TRANSPORT", "STATUS");
-            println!("{}", "-".repeat(56));
+            println!("{:<24} {:<10} {:<18} {:<12}", "SERVER NAME", "SCOPE", "TRANSPORT", "STATUS");
+            println!("{}", "-".repeat(68));
             for (name, s) in &config.servers {
+                let scope = match s {
+                    crate::state::ServerConfig::Local { .. } => "local",
+                    crate::state::ServerConfig::Remote { url, .. } => {
+                        if crate::components::mcps::is_remote_url(url) {
+                            "remote"
+                        } else {
+                            "local"
+                        }
+                    }
+                };
                 let transport = match s {
                     crate::state::ServerConfig::Local { transport, .. } => match transport {
                         crate::state::LocalTransport::Stdio => "stdio",
@@ -663,7 +674,7 @@ async fn main() -> color_eyre::Result<()> {
                         crate::state::RemoteTransport::Sse => "sse",
                     },
                 };
-                println!("{:<24} {:<18} {:<12}", name, transport, "configured");
+                println!("{:<24} {:<10} {:<18} {:<12}", name, scope, transport, "configured");
             }
         }
     }

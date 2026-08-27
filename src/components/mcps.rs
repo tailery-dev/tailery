@@ -5,21 +5,46 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, Tabs, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table, Tabs},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::action::Action;
 use crate::components::Component;
-use crate::shim::TelemetryMessage;
-use crate::state::AppState;
 use crate::components::inspector::InspectorEvent;
+use crate::state::AppState;
 use crate::tui::Event;
 
-#[derive(Default)]
+pub fn is_remote_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    let stripped = lower
+        .strip_prefix("http://")
+        .or_else(|| lower.strip_prefix("https://"))
+        .unwrap_or(&lower);
+
+    let host = if stripped.starts_with('[') {
+        if let Some(end) = stripped.find(']') {
+            &stripped[1..end]
+        } else {
+            stripped.split(&['/', ':', '?'][..]).next().unwrap_or("")
+        }
+    } else {
+        stripped.split(&['/', ':', '?'][..]).next().unwrap_or("")
+    };
+
+    !(host.is_empty()
+        || host == "localhost"
+        || host == "127.0.0.1"
+        || host == "0.0.0.0"
+        || host == "::1"
+        || host == "[::1]")
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct UnifiedMcpItem {
     pub name: String,
-    pub transport: String,
+    pub scope: String,     // "local" or "remote" (inferred)
+    pub transport: String, // "stdio", "streamable-http", "sse", "http"
     pub is_container: bool,
     pub is_enabled_in_profile: bool,
     pub running: bool,
@@ -41,7 +66,6 @@ pub enum McpBottomPaneMode {
     Logs,
     Inspector,
 }
-
 
 #[derive(Default)]
 pub struct Mcps {
@@ -65,7 +89,7 @@ impl Mcps {
         for (name, s) in &state.servers {
             let is_enabled = enabled_in_profile.map(|list| list.contains(name)).unwrap_or(true);
 
-            let (transport, is_container, img_or_cmd) = match s {
+            let (scope, transport, is_container, img_or_cmd) = match s {
                 crate::state::ServerConfig::Local { command, args, container, transport, .. } => {
                     let transport_str = match transport {
                         crate::state::LocalTransport::Stdio => "stdio",
@@ -74,11 +98,11 @@ impl Mcps {
                         crate::state::LocalTransport::Sse { .. } => "sse",
                     };
                     if !container.image.is_empty() {
-                        (transport_str, true, container.image.clone())
+                        ("local", transport_str, true, container.image.clone())
                     } else if let Some(cmd) = command {
-                        (transport_str, true, format!("{} {}", cmd, args.join(" ")))
+                        ("local", transport_str, true, format!("{} {}", cmd, args.join(" ")))
                     } else {
-                        (transport_str, true, "docker container".to_string())
+                        ("local", transport_str, true, "local command".to_string())
                     }
                 }
                 crate::state::ServerConfig::Remote { url, transport, .. } => {
@@ -87,7 +111,8 @@ impl Mcps {
                         crate::state::RemoteTransport::Http => "http",
                         crate::state::RemoteTransport::Sse => "sse",
                     };
-                    (transport_str, false, url.clone())
+                    let scope_str = if is_remote_url(url) { "remote" } else { "local" };
+                    (scope_str, transport_str, false, url.clone())
                 }
             };
 
@@ -107,6 +132,7 @@ impl Mcps {
 
             items.push(UnifiedMcpItem {
                 name: name.clone(),
+                scope: scope.to_string(),
                 transport: transport.to_string(),
                 is_container,
                 is_enabled_in_profile: is_enabled,
@@ -117,7 +143,7 @@ impl Mcps {
             });
         }
 
-        // 2. Extra managed/host containers
+        // 2. Extra managed/host containers (e.g. web-search)
         for c in &state.containers {
             let clean_name = c.name.trim_start_matches('/');
             if !items.iter().any(|item| item.name == c.name || item.name == clean_name) {
@@ -129,15 +155,59 @@ impl Mcps {
                     "○ STOPPED".to_string()
                 };
 
+                let inferred_transport = if !c.ports.is_empty() {
+                    "streamable-http"
+                } else {
+                    "stdio"
+                };
+
+                let is_enabled = enabled_in_profile
+                    .map(|list| list.contains(&clean_name.to_string()) || list.contains(&c.name))
+                    .unwrap_or(false);
+
                 items.push(UnifiedMcpItem {
                     name: clean_name.to_string(),
-                    transport: "docker".to_string(),
+                    scope: "local".to_string(),
+                    transport: inferred_transport.to_string(),
                     is_container: true,
-                    is_enabled_in_profile: false,
+                    is_enabled_in_profile: is_enabled,
                     running: c.running,
                     status_text,
                     image_or_cmd: c.image.clone(),
                     ports: c.ports.clone(),
+                });
+            }
+        }
+
+        // 3. Static configured containers if not yet detected in live daemon list
+        for (name, cfg) in &state.configured_containers {
+            if !items.iter().any(|item| item.name == *name) {
+                let is_enabled = enabled_in_profile
+                    .map(|list| list.contains(name))
+                    .unwrap_or(false);
+
+                let inferred_transport = if !cfg.ports.is_empty() {
+                    "streamable-http"
+                } else {
+                    "stdio"
+                };
+
+                let ports: Vec<String> = cfg
+                    .ports
+                    .iter()
+                    .map(|p| format!("{}:{}", p.host_port, p.container_port))
+                    .collect();
+
+                items.push(UnifiedMcpItem {
+                    name: name.clone(),
+                    scope: "local".to_string(),
+                    transport: inferred_transport.to_string(),
+                    is_container: true,
+                    is_enabled_in_profile: is_enabled,
+                    running: false,
+                    status_text: "○ STOPPED".to_string(),
+                    image_or_cmd: cfg.image.clone(),
+                    ports,
                 });
             }
         }
@@ -179,8 +249,8 @@ impl StatefulWidget for &Mcps {
         let top_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
-                Constraint::Percentage(56), // Table
-                Constraint::Percentage(44), // Detail Panel
+                Constraint::Percentage(58), // Table
+                Constraint::Percentage(42), // Detail Panel
             ])
             .split(main_chunks[0]);
 
@@ -200,6 +270,14 @@ impl StatefulWidget for &Mcps {
                     Style::default()
                         .fg(Color::White)
                         .add_modifier(Modifier::BOLD)
+                };
+
+                let scope_style = if item.scope == "remote" {
+                    Style::default()
+                        .fg(Color::Magenta)
+                        .add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(Color::Cyan)
                 };
 
                 let profile_badge = if item.is_enabled_in_profile {
@@ -225,13 +303,15 @@ impl StatefulWidget for &Mcps {
                 };
 
                 let transport_style = match item.transport.as_str() {
-                    "stdio" | "http" => Style::default().fg(Color::Cyan),
-                    "container" | "docker" => Style::default().fg(Color::Magenta),
+                    "stdio" => Style::default().fg(Color::Rgb(130, 180, 255)),
+                    "streamable-http" | "http" => Style::default().fg(Color::Green),
+                    "sse" => Style::default().fg(Color::Yellow),
                     _ => Style::default().fg(Color::DarkGray),
                 };
 
                 Row::new(vec![
                     Span::styled(format!(" {} ", item.name), name_style),
+                    Span::styled(format!(" {} ", item.scope), scope_style),
                     Span::styled(&item.transport, transport_style),
                     profile_badge,
                     Span::styled(status_badge, status_style),
@@ -250,19 +330,21 @@ impl StatefulWidget for &Mcps {
         let table = Table::new(
             rows,
             [
-                Constraint::Percentage(28),
+                Constraint::Percentage(24),
+                Constraint::Percentage(12),
                 Constraint::Percentage(18),
+                Constraint::Percentage(14),
                 Constraint::Percentage(16),
-                Constraint::Percentage(18),
-                Constraint::Percentage(20),
+                Constraint::Percentage(16),
             ],
         )
         .header(
             Row::new(vec![
                 "Name",
+                "Scope",
                 "Transport",
                 "Profile",
-                "Runtime",
+                "Status",
                 "Target / Image",
             ])
             .style(
@@ -298,11 +380,20 @@ impl StatefulWidget for &Mcps {
                     ),
                 ]),
                 Line::from(vec![
-                    Span::styled("Transport:    ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("Scope:        ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        &item.scope,
+                        if item.scope == "remote" {
+                            Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)
+                        } else {
+                            Style::default().fg(Color::Cyan)
+                        },
+                    ),
+                    Span::raw(" │ Transport: "),
                     Span::styled(
                         &item.transport,
                         Style::default()
-                            .fg(Color::Magenta)
+                            .fg(Color::White)
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::raw(" │ Status: "),
@@ -759,3 +850,118 @@ impl StatefulWidget for &Mcps {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{AppState, ServerConfig, LocalTransport, RemoteTransport, ContainerConfig};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_is_remote_url_classification() {
+        assert!(!is_remote_url("http://localhost:3000/sse"));
+        assert!(!is_remote_url("http://127.0.0.1:8080/mcp"));
+        assert!(!is_remote_url("http://0.0.0.0:8000"));
+        assert!(!is_remote_url("http://[::1]:3000"));
+        assert!(!is_remote_url("localhost:3000"));
+        assert!(is_remote_url("https://mcp.github.com/v1/sse"));
+        assert!(is_remote_url("https://api.context7.ai/mcp"));
+        assert!(is_remote_url("http://192.168.1.100:3000/mcp"));
+    }
+
+    #[test]
+    fn test_mcps_build_items_inferred_scope_and_transport() {
+        let mut servers = HashMap::new();
+        servers.insert(
+            "local-stdio".to_string(),
+            ServerConfig::Local {
+                command: Some("npx".to_string()),
+                args: vec![],
+                env: HashMap::new(),
+                tool_filter: Default::default(),
+                container: ContainerConfig::default(),
+                transport: LocalTransport::Stdio,
+            },
+        );
+        servers.insert(
+            "local-http".to_string(),
+            ServerConfig::Remote {
+                url: "http://localhost:3000/mcp".to_string(),
+                transport: RemoteTransport::StreamableHttp,
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                tool_filter: Default::default(),
+                shim_port: None,
+            },
+        );
+        servers.insert(
+            "remote-sse".to_string(),
+            ServerConfig::Remote {
+                url: "https://mcp.company.com/sse".to_string(),
+                transport: RemoteTransport::Sse,
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                tool_filter: Default::default(),
+                shim_port: None,
+            },
+        );
+
+        let mut state = AppState {
+            version: "1.0.0".to_string(),
+            settings: crate::state::GlobalSettings {
+                active_profile: "default".to_string(),
+                docker_socket: None,
+                sync_clients: vec![],
+                filter_managed_containers_only: None,
+            },
+            servers,
+            configured_containers: HashMap::new(),
+            profiles: HashMap::new(),
+            workspaces: HashMap::new(),
+            docker_status: String::new(),
+            containers: Vec::new(),
+            container_logs: Vec::new(),
+            inspector_events: Vec::new(),
+        };
+
+        // Add an extra running container with ports (like web-search)
+        state.containers.push(crate::docker::ContainerStatusInfo {
+            id: "123".to_string(),
+            name: "web-search".to_string(),
+            image: "ghcr.io/aas-ee/open-web-search:latest".to_string(),
+            state: "running".to_string(),
+            status: "Up".to_string(),
+            running: true,
+            ports: vec!["3000:3000".to_string()],
+            configured: true,
+            is_managed: true,
+            labels: HashMap::new(),
+            daemon_online: true,
+            error: None,
+            env_count: 0,
+            mount_count: 0,
+            network_name: "bridge".to_string(),
+            auto_start: true,
+        });
+
+        let items = Mcps::build_items(&state);
+
+        let local_stdio = items.iter().find(|i| i.name == "local-stdio").unwrap();
+        assert_eq!(local_stdio.scope, "local");
+        assert_eq!(local_stdio.transport, "stdio");
+
+        let local_http = items.iter().find(|i| i.name == "local-http").unwrap();
+        assert_eq!(local_http.scope, "local");
+        assert_eq!(local_http.transport, "streamable-http");
+
+        let remote_sse = items.iter().find(|i| i.name == "remote-sse").unwrap();
+        assert_eq!(remote_sse.scope, "remote");
+        assert_eq!(remote_sse.transport, "sse");
+
+        let web_search = items.iter().find(|i| i.name == "web-search").unwrap();
+        assert_eq!(web_search.scope, "local");
+        assert_eq!(web_search.transport, "streamable-http");
+        assert_ne!(web_search.transport, "docker");
+    }
+}
+

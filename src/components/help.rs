@@ -194,7 +194,7 @@ impl Widget for &Help {
 }
 
 impl Component for Help {
-    fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
+    fn handle_events(&mut self, _event: Option<Event>) -> Result<Option<Action>> {
         Ok(None)
     }
 }

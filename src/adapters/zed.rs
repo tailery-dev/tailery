@@ -26,15 +26,24 @@ impl ClientAdapter for ZedAdapter {
                 message: "Could not resolve user home directory".to_string(),
             })?;
 
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(app_data) = std::env::var_os("APPDATA") {
+                    return Ok(PathBuf::from(app_data).join("Zed").join("settings.json"));
+                }
+            }
+
+            // Per Zed MCP spec: macOS uses XDG ~/.config/zed/settings.json with fallback to Library/Application Support
+            let xdg_path = home.join(".config").join("zed").join("settings.json");
             #[cfg(target_os = "macos")]
-            let path = home.join("Library/Application Support/Zed/settings.json");
+            {
+                let legacy_path = home.join("Library/Application Support/Zed/settings.json");
+                if !xdg_path.exists() && legacy_path.exists() {
+                    return Ok(legacy_path);
+                }
+            }
 
-            #[cfg(not(target_os = "macos"))]
-            let path = dirs::config_dir()
-                .map(|p| p.join("zed").join("settings.json"))
-                .unwrap_or_else(|| home.join(".config/zed/settings.json"));
-
-            Ok(path)
+            Ok(xdg_path)
         }
     }
 
@@ -114,11 +123,7 @@ impl ClientAdapter for ZedAdapter {
             adapter: self.name(),
             source,
         })?;
-        let root: Value =
-            serde_json::from_str(&content).map_err(|source| AdapterError::Serialization {
-                adapter: self.name(),
-                source,
-            })?;
+        let root: Value = super::parse_json_relaxed(&content);
 
         let mut result = HashMap::new();
         if let Some(context_servers) = root.get("context_servers").and_then(|v| v.as_object()) {
@@ -157,12 +162,21 @@ impl ClientAdapter for ZedAdapter {
                             transport: crate::state::LocalTransport::Stdio,
                         },
                     );
-                } else if let Some(endpoint) = val.get("endpoint").and_then(|v| v.as_str()) {
+                } else if let Some(url_str) = val.get("url").or_else(|| val.get("endpoint")).and_then(|v| v.as_str()) {
+                    let headers = val
+                        .get("headers")
+                        .and_then(|v| v.as_object())
+                        .map(|obj| {
+                            obj.iter()
+                                .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     result.insert(
                         name.to_string(),
                         ServerConfig::Remote {
-                            url: endpoint.to_string(),
-                            headers: HashMap::new(),
+                            url: url_str.to_string(),
+                            headers,
                             env: HashMap::new(),
                             transport: crate::state::RemoteTransport::StreamableHttp,
                             tool_filter: ToolFilter::default(),
@@ -175,50 +189,119 @@ impl ClientAdapter for ZedAdapter {
         Ok(result)
     }
 
-    fn write_servers(
+    fn extract_managed_config(
         &self,
-        profile: &str,
-        path: &Path,
-        servers: &HashMap<String, ServerConfig>,
-    ) -> Result<(), AdapterError> {
-        if path.exists() {
-            let _ = crate::backup::create_backup(profile, self.name(), path);
-        }
+        _path: &Path,
+        content_json: &Value,
+    ) -> Value {
+        let mut managed = serde_json::Map::new();
+        let servers = content_json
+            .get("context_servers")
+            .cloned()
+            .unwrap_or_else(|| json!({}));
+        managed.insert("context_servers".to_string(), servers);
+        Value::Object(managed)
+    }
 
-        let mut root: Value = if path.exists() {
-            let content = std::fs::read_to_string(path).map_err(|source| AdapterError::Io {
-                adapter: self.name(),
-                source,
-            })?;
-            serde_json::from_str(&content).unwrap_or_else(|_| json!({}))
-        } else {
-            json!({})
+    fn merge_managed_config(
+        &self,
+        _path: &Path,
+        existing_json: Option<&Value>,
+        servers: &HashMap<String, ServerConfig>,
+    ) -> Result<Value, AdapterError> {
+        let generated = self.generate_config(servers)?;
+        let mut root = match existing_json {
+            Some(Value::Object(map)) => Value::Object(map.clone()),
+            _ => json!({}),
         };
 
-        let generated = self.generate_config(servers)?;
-        if let Some(new_servers) = generated.get("context_servers") {
-            if let Some(root_map) = root.as_object_mut() {
-                root_map.insert("context_servers".to_string(), new_servers.clone());
+        if let Some(root_map) = root.as_object_mut() {
+            let mut target_servers = if let Some(existing_servers) = root_map.get("context_servers").and_then(|v| v.as_object()) {
+                existing_servers.clone()
+            } else {
+                serde_json::Map::new()
+            };
+
+            // Remove only Tailery-managed servers that are no longer active
+            let mut keys_to_remove = Vec::new();
+            for (k, v) in &target_servers {
+                let is_tailery_managed = if servers.contains_key(k) {
+                    true
+                } else if let Some(cmd_obj) = v.get("command").and_then(|c| c.as_object()) {
+                    if let Some(args) = cmd_obj.get("args").and_then(|a| a.as_array()) {
+                        args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
+                if is_tailery_managed && !servers.contains_key(k) {
+                    keys_to_remove.push(k.clone());
+                }
             }
+
+            for k in keys_to_remove {
+                target_servers.remove(&k);
+            }
+
+            if let Some(new_servers) = generated.get("context_servers").and_then(|v| v.as_object()) {
+                for (k, v) in new_servers {
+                    target_servers.insert(k.clone(), v.clone());
+                }
+            }
+
+            root_map.insert("context_servers".to_string(), Value::Object(target_servers));
         }
 
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|source| AdapterError::Io {
-                adapter: self.name(),
-                source,
-            })?;
-        }
+        Ok(root)
+    }
 
-        let formatted =
-            serde_json::to_string_pretty(&root).map_err(|source| AdapterError::Serialization {
-                adapter: self.name(),
-                source,
-            })?;
-        std::fs::write(path, formatted).map_err(|source| AdapterError::Io {
-            adapter: self.name(),
-            source,
-        })?;
-        Ok(())
+    fn discover_mcps(
+        &self,
+        path: Option<&Path>,
+        state: &crate::state::AppState,
+    ) -> Result<Vec<super::DiscoveredMcp>, AdapterError> {
+        let Some(p) = path else {
+            return Ok(Vec::new());
+        };
+        if !p.exists() {
+            return Ok(Vec::new());
+        }
+        let servers = self.read_servers(p)?;
+        let mut discovered = Vec::new();
+        for (name, cfg) in servers {
+            let status = super::classify_mcp_status(&name, &cfg, state);
+            let transport_label = match &cfg {
+                ServerConfig::Local { transport, command, .. } => {
+                    if command.as_deref() == Some("docker") {
+                        "docker".to_string()
+                    } else {
+                        match transport {
+                            crate::state::LocalTransport::Stdio => "stdio".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::Http { .. } => "http".to_string(),
+                            crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
+                        }
+                    }
+                }
+                ServerConfig::Remote { transport, .. } => match transport {
+                    crate::state::RemoteTransport::StreamableHttp => "streamable-http".to_string(),
+                    crate::state::RemoteTransport::Http => "http".to_string(),
+                    crate::state::RemoteTransport::Sse => "sse".to_string(),
+                },
+            };
+            discovered.push(super::DiscoveredMcp {
+                name,
+                scope: super::McpSourceScope::User,
+                config: cfg,
+                status,
+                transport_label,
+                raw_json: serde_json::json!({}),
+            });
+        }
+        Ok(discovered)
     }
 
     fn detect_installed(&self) -> bool {
@@ -283,6 +366,7 @@ mod tests {
                     ports: vec![],
                     network: "none".to_string(),
                     resources: None,
+                    auto_start: false,
                 },
                 transport: crate::state::LocalTransport::Stdio,
             },
@@ -348,6 +432,117 @@ mod roundtrip_tests {
 
         let read_back = adapter.read_servers(&path).unwrap();
         assert!(read_back.contains_key("custom-zed-server"));
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_zed_preserves_unmanaged_keys_and_diff_extract() {
+        let adapter = ZedAdapter::default();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("tailery_test_zed_preserve_{}", nanos));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let path = temp_dir.join("settings.json");
+
+        // Seed with multiple user settings
+        let seed = json!({
+            "theme": "Nord",
+            "vim_mode": true,
+            "buffer_font_size": 16,
+            "context_servers": {
+                "old_server": {
+                    "endpoint": "http://old.test"
+                }
+            }
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&seed).unwrap()).unwrap();
+
+        // Check extract_managed_config only extracts context_servers
+        let managed = adapter.extract_managed_config(&path, &seed);
+        assert!(managed.get("context_servers").is_some());
+        assert!(managed.get("theme").is_none());
+        assert!(managed.get("vim_mode").is_none());
+        assert!(managed.get("buffer_font_size").is_none());
+
+        let mut servers = HashMap::new();
+        servers.insert(
+            "new_server".to_string(),
+            ServerConfig::Remote {
+                url: "http://new.test".to_string(),
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: ToolFilter::default(),
+            },
+        );
+
+        adapter.write_servers("default", &path, &servers).unwrap();
+
+        let updated_raw = std::fs::read_to_string(&path).unwrap();
+        let updated: Value = serde_json::from_str(&updated_raw).unwrap();
+
+        // Verify unmanaged keys are preserved intact!
+        assert_eq!(updated["theme"], "Nord");
+        assert_eq!(updated["vim_mode"], true);
+        assert_eq!(updated["buffer_font_size"], 16);
+        assert!(updated["context_servers"]["new_server"].is_object());
+        assert!(updated["context_servers"]["old_server"].is_object());
+
+        let _ = std::fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn test_zed_jsonc_with_comments_and_trailing_commas() {
+        let adapter = ZedAdapter::default();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = std::env::temp_dir().join(format!("tailery_test_zed_jsonc_{}", nanos));
+        let _ = std::fs::create_dir_all(&temp_dir);
+        let path = temp_dir.join("settings.json");
+
+        // Seed with realistic Zed settings containing comments & trailing commas
+        let seed = r#"// Zed settings
+{
+  "theme": "Ayu Dark",
+  //"provider": "zed"
+  "language_models": {
+    "lmstudio": {
+      "api_url": "http://localhost:1234/api/v0",
+    },
+  },
+}
+"#;
+        std::fs::write(&path, seed).unwrap();
+
+        // 1. managed_diff_content should extract { "context_servers": {} } without failing
+        let diff_content = adapter.managed_diff_content(Some(&path)).unwrap();
+        assert!(diff_content.contains("context_servers"));
+
+        // 2. Write a new server
+        let mut servers = HashMap::new();
+        servers.insert(
+            "my-mcp".to_string(),
+            ServerConfig::Remote {
+                url: "http://localhost:8080".to_string(),
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: ToolFilter::default(),
+            },
+        );
+
+        adapter.write_servers("default", &path, &servers).unwrap();
+
+        let updated_raw = std::fs::read_to_string(&path).unwrap();
+        assert!(updated_raw.contains("my-mcp"));
+        assert!(updated_raw.contains("Ayu Dark"));
 
         let _ = std::fs::remove_dir_all(temp_dir);
     }

@@ -52,7 +52,7 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<()>` - An Ok result or an error.
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn register_config_handler(&mut self, config: Config) -> Result<()> {
         Ok(())
     }
@@ -65,7 +65,8 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<()>` - An Ok result or an error.
-    fn init(&mut self, area: Rect) -> Result<()> {
+    #[allow(dead_code)]
+    fn init(&mut self, _area: Rect) -> Result<()> {
         Ok(())
     }
     /// Handle incoming events and produce actions if necessary.
@@ -77,6 +78,7 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<Option<Action>>` - An action to be processed or none.
+    #[allow(dead_code)]
     fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
         let r = match event {
             Some(Event::Key(key_event)) => self.handle_key_events(key_event)?,
@@ -94,7 +96,7 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn handle_key_events(&mut self, key: KeyEvent) -> Result<Option<Action>> {
         Ok(None)
     }
@@ -107,7 +109,7 @@ pub trait Component {
     /// # Returns
     ///
     /// * `Result<Option<Action>>` - An action to be processed or none.
-    #[allow(unused_variables)]
+    #[allow(unused_variables, dead_code)]
     fn handle_mouse_events(&mut self, mouse: MouseEvent) -> Result<Option<Action>> {
         Ok(None)
     }

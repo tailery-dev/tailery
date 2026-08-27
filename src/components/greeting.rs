@@ -297,7 +297,7 @@ impl StatefulWidget for &Greeting {
 }
 
 impl Component for Greeting {
-    fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
+    fn handle_events(&mut self, _event: Option<Event>) -> Result<Option<Action>> {
         Ok(None)
     }
 }

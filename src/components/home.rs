@@ -5,6 +5,7 @@ use super::Component;
 use crate::{action::Action, config::Config};
 
 #[derive(Default)]
+#[allow(dead_code)]
 pub struct Home {
     command_tx: Option<UnboundedSender<Action>>,
     config: Config,

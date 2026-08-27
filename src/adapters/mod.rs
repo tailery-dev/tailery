@@ -162,6 +162,7 @@ pub fn build_stdio_docker_args(
 }
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum AdapterError {
     #[error("I/O error for {adapter}: {source}")]
     Io {
@@ -187,8 +188,131 @@ pub enum AdapterError {
     },
 }
 
+/// Parses raw JSON or JSON5/JSONC (with comments, trailing commas) into serde_json::Value.
+pub fn parse_json_relaxed(raw: &str) -> serde_json::Value {
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(raw) {
+        return val;
+    }
+    if let Ok(val) = json5::from_str::<serde_json::Value>(raw) {
+        return val;
+    }
+    serde_json::json!({})
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum McpSourceScope {
+    User,
+    Project(String),
+}
+
+impl std::fmt::Display for McpSourceScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            McpSourceScope::User => write!(f, "user"),
+            McpSourceScope::Project(p) => {
+                let name = Path::new(p)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(p);
+                write!(f, "proj: {}", name)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscoveredMcpStatus {
+    /// In Tailery & active in current profile
+    ManagedEnabled,
+    /// In Tailery & disabled in current profile
+    ManagedDisabled,
+    /// In Tailery, but on-disk config differs
+    ManagedDiff,
+    /// Found on disk, not in Tailery
+    Unmanaged,
+}
+
+#[derive(Debug, Clone)]
+pub struct DiscoveredMcp {
+    pub name: String,
+    pub scope: McpSourceScope,
+    pub config: ServerConfig,
+    pub status: DiscoveredMcpStatus,
+    pub transport_label: String,
+    pub raw_json: serde_json::Value,
+}
+
+pub fn classify_mcp_status(
+    name: &str,
+    on_disk_cfg: &ServerConfig,
+    state: &crate::state::AppState,
+) -> DiscoveredMcpStatus {
+    if let Some(tailery_srv) = state.servers.get(name) {
+        if tailery_srv_matches(tailery_srv, on_disk_cfg) {
+            if state.is_server_enabled_in_active_profile(name) {
+                DiscoveredMcpStatus::ManagedEnabled
+            } else {
+                DiscoveredMcpStatus::ManagedDisabled
+            }
+        } else {
+            DiscoveredMcpStatus::ManagedDiff
+        }
+    } else if let Some(_container_cfg) = state.configured_containers.get(name) {
+        if state.is_server_enabled_in_active_profile(name) {
+            DiscoveredMcpStatus::ManagedEnabled
+        } else {
+            DiscoveredMcpStatus::ManagedDisabled
+        }
+    } else {
+        match on_disk_cfg {
+            ServerConfig::Local { args, .. } => {
+                if args.iter().any(|a| a.contains("dev.tailery.managed=true") || a.contains("dev.tailery.server=")) {
+                    if state.is_server_enabled_in_active_profile(name) {
+                        DiscoveredMcpStatus::ManagedEnabled
+                    } else if state.servers.contains_key(name) || state.configured_containers.contains_key(name) {
+                        DiscoveredMcpStatus::ManagedDisabled
+                    } else {
+                        DiscoveredMcpStatus::ManagedDiff
+                    }
+                } else {
+                    DiscoveredMcpStatus::Unmanaged
+                }
+            }
+            _ => DiscoveredMcpStatus::Unmanaged,
+        }
+    }
+}
+
+pub fn tailery_srv_matches(a: &ServerConfig, b: &ServerConfig) -> bool {
+    match (a, b) {
+        (ServerConfig::Remote { url: u1, .. }, ServerConfig::Remote { url: u2, .. }) => u1 == u2,
+        (
+            ServerConfig::Local {
+                command: c1,
+                args: a1,
+                ..
+            },
+            ServerConfig::Local {
+                command: c2,
+                args: a2,
+                ..
+            },
+        ) => {
+            if c1 == c2 && a1 == a2 {
+                return true;
+            }
+            let has_same_server_label = a2.iter().any(|arg| arg.contains("dev.tailery.server="));
+            if c2.as_deref() == Some("docker") && has_same_server_label {
+                return true;
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
 /// Trait defining operations for syncing MCP configurations with specific AI/IDE clients.
-pub trait ClientAdapter: Send + Sync {
+pub trait ClientAdapter: Send + Sync + std::fmt::Debug {
     /// Identifier name of the adapter (e.g. "cursor", "claude_code", "zed", "antigravity").
     fn name(&self) -> &'static str;
 
@@ -205,9 +329,98 @@ pub trait ClientAdapter: Send + Sync {
     ) -> Result<serde_json::Value, AdapterError>;
 
     /// Read and parse existing server configs from the client's configuration file.
+    #[allow(dead_code)]
     fn read_servers(&self, path: &Path) -> Result<HashMap<String, ServerConfig>, AdapterError>;
 
-    /// Write active servers to the target config file, creating a safety backup for the (profile, client) pair and preserving client-specific metadata where applicable.
+    /// Extracts ONLY the managed portion of the configuration from the on-disk JSON structure.
+    /// Used by the diff viewer so unmanaged keys (themes, user settings, etc.) are omitted.
+    fn extract_managed_config(
+        &self,
+        path: &Path,
+        content_json: &serde_json::Value,
+    ) -> serde_json::Value;
+
+    /// Merges generated server configurations into an existing on-disk JSON structure,
+    /// updating ONLY predefined managed keys/paths and leaving everything else intact.
+    fn merge_managed_config(
+        &self,
+        path: &Path,
+        existing_json: Option<&serde_json::Value>,
+        servers: &HashMap<String, ServerConfig>,
+    ) -> Result<serde_json::Value, AdapterError>;
+
+    /// Discover all MCP servers in client configuration files, classifying them as managed, diff, or unmanaged.
+    fn discover_mcps(
+        &self,
+        path: Option<&Path>,
+        state: &crate::state::AppState,
+    ) -> Result<Vec<DiscoveredMcp>, AdapterError> {
+        let Some(p) = path else {
+            return Ok(Vec::new());
+        };
+        if !p.exists() {
+            return Ok(Vec::new());
+        }
+        let servers = self.read_servers(p)?;
+        let mut discovered = Vec::new();
+        for (name, cfg) in servers {
+            let status = classify_mcp_status(&name, &cfg, state);
+            let transport_label = match &cfg {
+                ServerConfig::Local { transport, command, .. } => {
+                    if command.as_deref() == Some("docker") {
+                        "docker".to_string()
+                    } else {
+                        match transport {
+                            crate::state::LocalTransport::Stdio => "stdio".to_string(),
+                            crate::state::LocalTransport::StreamableHttp { .. } => "streamable-http".to_string(),
+                            crate::state::LocalTransport::Http { .. } => "http".to_string(),
+                            crate::state::LocalTransport::Sse { .. } => "sse".to_string(),
+                        }
+                    }
+                }
+                ServerConfig::Remote { transport, .. } => match transport {
+                    crate::state::RemoteTransport::StreamableHttp => "streamable-http".to_string(),
+                    crate::state::RemoteTransport::Http => "http".to_string(),
+                    crate::state::RemoteTransport::Sse => "sse".to_string(),
+                },
+            };
+            discovered.push(DiscoveredMcp {
+                name,
+                scope: McpSourceScope::User,
+                config: cfg,
+                status,
+                transport_label,
+                raw_json: serde_json::json!({}),
+            });
+        }
+        Ok(discovered)
+    }
+
+    /// Returns the pretty-printed JSON string of ONLY the managed portion of the on-disk file.
+    /// If the file does not exist or has no managed configuration, returns an empty string.
+    fn managed_diff_content(&self, path: Option<&Path>) -> Result<String, AdapterError> {
+        let Some(p) = path else {
+            return Ok(String::new());
+        };
+        if !p.exists() {
+            return Ok(String::new());
+        }
+        let raw = std::fs::read_to_string(p).map_err(|source| AdapterError::Io {
+            adapter: self.name(),
+            source,
+        })?;
+        let parsed = parse_json_relaxed(&raw);
+        let managed = self.extract_managed_config(p, &parsed);
+        if managed.is_null() {
+            return Ok(String::new());
+        }
+        serde_json::to_string_pretty(&managed).map_err(|source| AdapterError::Serialization {
+            adapter: self.name(),
+            source,
+        })
+    }
+
+    /// Write active servers to the target config file, creating a safety backup of the full file for the (profile, client) pair and preserving client-specific metadata and unmanaged keys.
     fn write_servers(
         &self,
         profile: &str,
@@ -217,23 +430,37 @@ pub trait ClientAdapter: Send + Sync {
         if path.exists() {
             let _ = crate::backup::create_backup(profile, self.name(), path);
         }
-        let json_val = self.generate_config(servers)?;
+
+        let existing_json: Option<serde_json::Value> = if path.exists() {
+            let content = std::fs::read_to_string(path).map_err(|source| AdapterError::Io {
+                adapter: self.name(),
+                source,
+            })?;
+            Some(parse_json_relaxed(&content))
+        } else {
+            None
+        };
+
+        let merged_val = self.merge_managed_config(path, existing_json.as_ref(), servers)?;
+
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| AdapterError::Io {
                 adapter: self.name(),
                 source,
             })?;
         }
-        let formatted = serde_json::to_string_pretty(&json_val).map_err(|source| {
-            AdapterError::Serialization {
+
+        let formatted =
+            serde_json::to_string_pretty(&merged_val).map_err(|source| AdapterError::Serialization {
                 adapter: self.name(),
                 source,
-            }
-        })?;
+            })?;
+
         std::fs::write(path, formatted).map_err(|source| AdapterError::Io {
             adapter: self.name(),
             source,
         })?;
+
         Ok(())
     }
 
@@ -252,6 +479,7 @@ pub fn all_adapters() -> Vec<Box<dyn ClientAdapter>> {
 }
 
 /// Look up a client adapter by its identifier name.
+#[allow(dead_code)]
 pub fn get_adapter(name: &str) -> Option<Box<dyn ClientAdapter>> {
     match name.to_lowercase().as_str() {
         "cursor" => Some(Box::new(CursorAdapter)),

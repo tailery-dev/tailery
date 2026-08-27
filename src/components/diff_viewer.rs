@@ -120,13 +120,14 @@ impl StatefulWidget for &DiffViewer {
             .unwrap_or_else(|| "Unknown path".to_string());
 
         let exists = config_path.as_ref().map(|p| p.exists()).unwrap_or(false);
-        let on_disk_content = config_path
-            .as_ref()
-            .and_then(|p| std::fs::read_to_string(p).ok())
+        let on_disk_content = current_adapter
+            .managed_diff_content(config_path.as_deref())
             .unwrap_or_default();
 
+        let active_profile = &state.settings.active_profile;
+        let active_servers = state.get_active_profile_servers();
         let generated_json = current_adapter
-            .generate_config(&state.servers)
+            .generate_config(&active_servers)
             .and_then(|v| {
                 serde_json::to_string_pretty(&v).map_err(|e| {
                     crate::adapters::AdapterError::Serialization {
@@ -137,7 +138,7 @@ impl StatefulWidget for &DiffViewer {
             })
             .unwrap_or_default();
 
-        let backup_count = crate::backup::list_backups(None, Some(current_adapter.name()))
+        let backup_count = crate::backup::list_backups(Some(active_profile), Some(current_adapter.name()))
             .map(|b| b.len())
             .unwrap_or(0);
 
@@ -175,31 +176,44 @@ impl StatefulWidget for &DiffViewer {
             .render(chunks[1], buf);
 
         // 3. Diff View using `similar`
-        let diff = TextDiff::from_lines(&on_disk_content, &generated_json);
         let mut diff_lines: Vec<Line> = Vec::new();
-
-        for change in diff.iter_all_changes() {
-            let (sign, style) = match change.tag() {
-                ChangeTag::Delete => ("-", Style::default().fg(Color::Red)),
-                ChangeTag::Insert => (
-                    "+",
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                ChangeTag::Equal => (" ", Style::default().fg(Color::DarkGray)),
-            };
-            diff_lines.push(Line::from(vec![
-                Span::styled(format!("{} ", sign), style),
-                Span::styled(change.value().trim_end_matches('\n'), style),
-            ]));
-        }
-
-        if diff_lines.is_empty() {
+        if on_disk_content.trim() == generated_json.trim() {
             diff_lines.push(Line::from(Span::styled(
                 "No differences. Configurations are in perfect sync.",
                 Style::default().fg(Color::Green),
             )));
+        } else if on_disk_content.trim().is_empty() {
+            for line in generated_json.lines() {
+                diff_lines.push(Line::from(vec![
+                    Span::styled("+ ", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                    Span::styled(line, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
+                ]));
+            }
+        } else if generated_json.trim().is_empty() {
+            for line in on_disk_content.lines() {
+                diff_lines.push(Line::from(vec![
+                    Span::styled("- ", Style::default().fg(Color::Red)),
+                    Span::styled(line, Style::default().fg(Color::Red)),
+                ]));
+            }
+        } else {
+            let diff = TextDiff::from_lines(&on_disk_content, &generated_json);
+            for change in diff.iter_all_changes() {
+                let (sign, style) = match change.tag() {
+                    ChangeTag::Delete => ("-", Style::default().fg(Color::Red)),
+                    ChangeTag::Insert => (
+                        "+",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    ChangeTag::Equal => (" ", Style::default().fg(Color::DarkGray)),
+                };
+                diff_lines.push(Line::from(vec![
+                    Span::styled(format!("{} ", sign), style),
+                    Span::styled(change.value().trim_end_matches('\n'), style),
+                ]));
+            }
         }
 
         let diff_block = Block::default()
@@ -224,7 +238,7 @@ impl StatefulWidget for &DiffViewer {
 }
 
 impl Component for DiffViewer {
-    fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
+    fn handle_events(&mut self, _event: Option<Event>) -> Result<Option<Action>> {
         Ok(None)
     }
 }

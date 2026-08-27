@@ -206,7 +206,7 @@ impl StatefulWidget for &SyncConfirm {
 }
 
 impl Component for SyncConfirm {
-    fn handle_events(&mut self, event: Option<Event>) -> Result<Option<Action>> {
+    fn handle_events(&mut self, _event: Option<Event>) -> Result<Option<Action>> {
         Ok(None)
     }
 }

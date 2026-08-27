@@ -146,6 +146,7 @@ impl ShimInterceptor {
     }
 
     /// Check if a tool execution is permitted under current policy.
+    #[allow(dead_code)]
     pub fn is_tool_allowed(&self, tool_name: &str) -> bool {
         if self
             .tool_filter
@@ -432,6 +433,7 @@ impl HttpShimInterceptor {
         }
     }
 
+    #[allow(dead_code)]
     pub fn is_tool_allowed(&self, tool_name: &str) -> bool {
         if self
             .state

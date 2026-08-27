@@ -211,6 +211,10 @@ impl Tui {
     pub async fn next_event(&mut self) -> Option<Event> {
         self.event_rx.recv().await
     }
+
+    pub fn try_next_event(&mut self) -> Option<Event> {
+        self.event_rx.try_recv().ok()
+    }
 }
 
 impl Deref for Tui {

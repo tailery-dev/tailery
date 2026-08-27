@@ -17,6 +17,7 @@ use thiserror::Error;
 use crate::state::{ContainerConfig, MountConfig, PortMapping};
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum DockerError {
     #[error("Docker API error: {0}")]
     Bollard(#[from] bollard::errors::Error),
@@ -782,12 +783,14 @@ pub fn parse_docker_run_command(cmd_line: &str) -> Result<ParsedDockerRun, Docke
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct DockerManager {
     client: Docker,
     socket_path: Option<String>,
     daemon_info: Option<DetectedDaemon>,
 }
 
+#[allow(dead_code)]
 impl DockerManager {
     /// Create a new DockerManager using basic connection or socket override.
     pub fn new(socket_override: Option<&str>) -> Result<Self, DockerError> {
@@ -1497,6 +1500,7 @@ mod tests {
                 memory_mb: Some(512),
                 cpus: Some(1.5),
             }),
+            auto_start: false,
         };
 
         let host_config = DockerManager::build_host_config(&config, None).unwrap();
@@ -1532,10 +1536,24 @@ mod tests {
         let mut config_servers = HashMap::new();
         config_servers.insert(
             "fs-server".to_string(),
-            crate::state::ServerConfig::StreamableHttp {
+            crate::state::ServerConfig::Remote {
                 url: "http://localhost:8080".to_string(),
                 headers: HashMap::new(),
                 env: HashMap::new(),
+                transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: crate::state::ToolFilter::default(),
+            },
+        );
+        config_servers.insert(
+            "custom-search".to_string(),
+            crate::state::ServerConfig::Remote {
+                url: "http://localhost:8081".to_string(),
+                headers: HashMap::new(),
+                env: HashMap::new(),
+                transport: crate::state::RemoteTransport::StreamableHttp,
+                shim_port: None,
+                tool_filter: crate::state::ToolFilter::default(),
             },
         );
 

@@ -7,9 +7,11 @@ use thiserror::Error;
 use crate::config::get_data_dir;
 
 pub const MAX_BACKUPS_PER_PAIR: usize = 10;
+#[allow(dead_code)]
 pub const MAX_BACKUPS_PER_CLIENT: usize = MAX_BACKUPS_PER_PAIR;
 
 #[derive(Error, Debug)]
+#[allow(dead_code)]
 pub enum BackupError {
     #[error("I/O error during backup operation: {0}")]
     Io(#[from] std::io::Error),
@@ -55,6 +57,7 @@ pub fn profile_client_backup_dir(profile: &str, client: &str) -> PathBuf {
 }
 
 /// Legacy client directory (for fallback resolution).
+#[allow(dead_code)]
 pub fn client_backup_dir(client: &str) -> PathBuf {
     backup_dir().join(client.to_lowercase())
 }

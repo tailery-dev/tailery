@@ -7,6 +7,8 @@ pub struct AppState {
     pub version: String,
     pub settings: GlobalSettings,
     pub servers: HashMap<String, ServerConfig>,
+    #[serde(default, rename = "containers")]
+    pub configured_containers: HashMap<String, ContainerConfig>,
     #[serde(default)]
     pub profiles: HashMap<String, ProfileConfig>,
     #[serde(default)]
@@ -32,6 +34,34 @@ pub struct GlobalSettings {
     pub sync_clients: Vec<String>,
     #[serde(default)]
     pub filter_managed_containers_only: Option<bool>,
+}
+
+impl Default for GlobalSettings {
+    fn default() -> Self {
+        Self {
+            active_profile: default_profile(),
+            docker_socket: None,
+            sync_clients: Vec::new(),
+            filter_managed_containers_only: None,
+        }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            version: "1.0.0".to_string(),
+            settings: GlobalSettings::default(),
+            servers: HashMap::new(),
+            configured_containers: HashMap::new(),
+            profiles: HashMap::new(),
+            workspaces: HashMap::new(),
+            docker_status: "Offline".to_string(),
+            containers: Vec::new(),
+            container_logs: Vec::new(),
+            inspector_events: Vec::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -177,6 +207,8 @@ pub struct ProfileConfig {
     pub enabled_servers: Vec<String>,
     #[serde(default = "default_enabled_clients")]
     pub enabled_clients: Vec<String>,
+    #[serde(default)]
+    pub include_project_mcps: bool,
 }
 
 impl Default for ProfileConfig {
@@ -296,16 +328,51 @@ impl AppState {
         }
     }
 
-    pub fn get_active_profile_servers(&self) -> HashMap<String, ServerConfig> {
+    pub fn is_server_enabled_in_active_profile(&self, server: &str) -> bool {
         if let Some(profile) = self.profiles.get(&self.settings.active_profile) {
-            self.servers
-                .iter()
-                .filter(|(name, _)| profile.is_server_enabled(name))
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
+            profile.is_server_enabled(server)
         } else {
-            self.servers.clone()
+            true
         }
+    }
+
+    pub fn get_active_profile_servers(&self) -> HashMap<String, ServerConfig> {
+        let mut result = HashMap::new();
+        if let Some(profile) = self.profiles.get(&self.settings.active_profile) {
+            for (name, srv) in &self.servers {
+                if profile.is_server_enabled(name) {
+                    result.insert(name.clone(), srv.clone());
+                }
+            }
+            for (name, cfg) in &self.configured_containers {
+                if profile.is_server_enabled(name) && !result.contains_key(name) {
+                    let srv = if !cfg.ports.is_empty() {
+                        let host_port = cfg.ports[0].host_port;
+                        ServerConfig::Remote {
+                            url: format!("http://localhost:{}", host_port),
+                            transport: crate::state::RemoteTransport::StreamableHttp,
+                            headers: HashMap::new(),
+                            env: HashMap::new(),
+                            tool_filter: crate::state::ToolFilter::default(),
+                            shim_port: None,
+                        }
+                    } else {
+                        ServerConfig::Local {
+                            command: None,
+                            args: vec![],
+                            env: HashMap::new(),
+                            tool_filter: crate::state::ToolFilter::default(),
+                            container: cfg.clone(),
+                            transport: crate::state::LocalTransport::Stdio,
+                        }
+                    };
+                    result.insert(name.clone(), srv);
+                }
+            }
+        } else {
+            result = self.servers.clone();
+        }
+        result
     }
 }
 
@@ -331,8 +398,11 @@ fn default_tcp() -> String {
 
 use directories::ProjectDirs;
 
+#[allow(dead_code)]
 pub const QUALIFIER: &str = "dev";
+#[allow(dead_code)]
 pub const ORGANIZATION: &str = "tailery";
+#[allow(dead_code)]
 pub const APPLICATION: &str = "tailery";
 
 // =============================================================================
@@ -340,6 +410,7 @@ pub const APPLICATION: &str = "tailery";
 // =============================================================================
 
 /// Returns `ProjectDirs` instance for Tailery based on standard platform conventions (`dev.tailery.tailery`).
+#[allow(dead_code)]
 pub fn project_dirs() -> Option<ProjectDirs> {
     ProjectDirs::from(QUALIFIER, ORGANIZATION, APPLICATION)
 }
@@ -397,6 +468,7 @@ pub fn get_config_path() -> PathBuf {
 /// 1. `TAILERY_DATA_DIR` or `TAILERY_DATA`
 /// 2. `XDG_DATA_HOME/tailery`
 /// 3. Default XDG fallback: `~/.local/share/tailery` or `.tailery_data`
+#[allow(dead_code)]
 pub fn get_data_dir() -> PathBuf {
     if let Ok(val) = std::env::var("TAILERY_DATA_DIR") {
         if !val.trim().is_empty() {
@@ -426,6 +498,7 @@ pub fn get_data_dir() -> PathBuf {
 /// 1. `TAILERY_CACHE_DIR` or `TAILERY_CACHE`
 /// 2. `XDG_CACHE_HOME/tailery`
 /// 3. Default XDG fallback: `~/.cache/tailery` or `.cache`
+#[allow(dead_code)]
 pub fn get_cache_dir() -> PathBuf {
     if let Ok(val) = std::env::var("TAILERY_CACHE_DIR") {
         if !val.trim().is_empty() {
@@ -450,11 +523,13 @@ pub fn get_cache_dir() -> PathBuf {
 }
 
 /// Resolves the XDG-compliant config path for Tailery (alias for `get_config_path()`).
+#[allow(dead_code)]
 pub fn xdg_config_path() -> PathBuf {
     get_config_path()
 }
 
 /// Resolves the XDG-compliant data directory for Tailery (alias for `get_data_dir()`).
+#[allow(dead_code)]
 pub fn xdg_data_dir() -> PathBuf {
     get_data_dir()
 }
@@ -501,3 +576,68 @@ impl Default for ServerConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_configured_containers_in_active_profile_servers() {
+        let mut configured_containers = HashMap::new();
+        configured_containers.insert(
+            "web-search".to_string(),
+            ContainerConfig {
+                auto_start: true,
+                image: "ghcr.io/aas-ee/open-web-search:latest".to_string(),
+                read_only_rootfs: false,
+                mounts: vec![],
+                ports: vec![PortMapping {
+                    host_port: 3000,
+                    container_port: 3000,
+                    protocol: "tcp".to_string(),
+                }],
+                network: "bridge".to_string(),
+                resources: None,
+            },
+        );
+
+        let mut profiles = HashMap::new();
+        profiles.insert(
+            "default".to_string(),
+            ProfileConfig {
+                enabled_servers: vec!["web-search".to_string()],
+                enabled_clients: vec!["zed".to_string()],
+            },
+        );
+
+        let state = AppState {
+            version: "1.0.0".to_string(),
+            settings: GlobalSettings {
+                active_profile: "default".to_string(),
+                docker_socket: None,
+                sync_clients: vec![],
+                filter_managed_containers_only: None,
+            },
+            servers: HashMap::new(),
+            configured_containers,
+            profiles,
+            workspaces: HashMap::new(),
+            docker_status: String::new(),
+            containers: Vec::new(),
+            container_logs: Vec::new(),
+            inspector_events: Vec::new(),
+        };
+
+        let active_servers = state.get_active_profile_servers();
+        assert!(active_servers.contains_key("web-search"));
+        let web_search_srv = active_servers.get("web-search").unwrap();
+        match web_search_srv {
+            ServerConfig::Remote { url, transport, .. } => {
+                assert_eq!(url, "http://localhost:3000");
+                assert_eq!(*transport, RemoteTransport::StreamableHttp);
+            }
+            _ => panic!("Expected Remote server config for web-search container with port 3000"),
+        }
+    }
+}
+
