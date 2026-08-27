@@ -1305,6 +1305,15 @@ impl App {
                         KeyCode::Backspace => {
                             w.handle_backspace();
                         }
+                        KeyCode::Up => {
+                            w.handle_up();
+                        }
+                        KeyCode::Down => {
+                            w.handle_down();
+                        }
+                        KeyCode::Char(' ') => {
+                            w.handle_space();
+                        }
                         KeyCode::Char(c) => {
                             w.handle_char(c);
                         }

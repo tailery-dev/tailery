@@ -424,8 +424,8 @@ pub trait ClientAdapter: Send + Sync + std::fmt::Debug {
     fn write_servers(
         &self,
         profile: &str,
-        path: &Path,
-        servers: &HashMap<String, ServerConfig>,
+        path: &std::path::Path,
+        servers: &std::collections::HashMap<String, crate::state::ServerConfig>,
     ) -> Result<(), AdapterError> {
         if path.exists() {
             let _ = crate::backup::create_backup(profile, self.name(), path);
@@ -462,6 +462,25 @@ pub trait ClientAdapter: Send + Sync + std::fmt::Debug {
         })?;
 
         Ok(())
+    }
+
+    /// Synchronizes all ManagedServers to the client's respective configuration tiers (Global, Global-Per-Project, In-Repo).
+    fn sync_servers(
+        &self,
+        profile: &str,
+        managed_servers: &std::collections::HashMap<String, crate::state::ManagedServer>,
+    ) -> Result<usize, AdapterError> {
+        // Default implementation falls back to the old global-only behavior.
+        // Adapters should override this to handle all tiers.
+        let mut global_servers = std::collections::HashMap::new();
+        for (name, srv) in managed_servers {
+            if srv.is_global {
+                global_servers.insert(name.clone(), srv.config.clone());
+            }
+        }
+        let global_path = self.config_path(None)?;
+        self.write_servers(profile, &global_path, &global_servers)?;
+        Ok(1)
     }
 
     /// Check if the client is installed or detectable on the host machine.

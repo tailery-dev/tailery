@@ -300,6 +300,43 @@ impl ClientAdapter for AntigravityAdapter {
         Ok(discovered)
     }
 
+    fn sync_servers(
+        &self,
+        profile: &str,
+        managed_servers: &HashMap<String, crate::state::ManagedServer>,
+    ) -> Result<usize, AdapterError> {
+        let mut global_servers = HashMap::new();
+        let mut project_servers_by_path: HashMap<PathBuf, HashMap<String, ServerConfig>> = HashMap::new();
+        let mut synced_count = 0;
+
+        for (name, srv) in managed_servers {
+            if srv.is_global {
+                global_servers.insert(name.clone(), srv.config.clone());
+            } else {
+                for path in &srv.in_repo_paths {
+                    project_servers_by_path
+                        .entry(path.clone())
+                        .or_default()
+                        .insert(name.clone(), srv.config.clone());
+                }
+            }
+        }
+
+        // Write global servers
+        let global_path = self.config_path(None)?;
+        self.write_servers(profile, &global_path, &global_servers)?;
+        synced_count += 1;
+
+        // Write project servers
+        for (ws_path, servers) in project_servers_by_path {
+            let proj_path = self.config_path(Some(&ws_path))?;
+            self.write_servers(profile, &proj_path, &servers)?;
+            synced_count += 1;
+        }
+
+        Ok(synced_count)
+    }
+
     fn detect_installed(&self) -> bool {
         if let Some(home) = dirs::home_dir() {
             if home.join(".gemini").exists()

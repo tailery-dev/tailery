@@ -77,6 +77,7 @@ impl ClientAdapter for ClaudeCodeAdapter {
                             "url".to_string(),
                             Value::String(format!("http://localhost:{}{}", port, path)),
                         );
+                        obj.insert("type".to_string(), Value::String("http".to_string()));
                         Value::Object(obj)
                     }
                     crate::state::LocalTransport::Sse { port, path } => {
@@ -108,6 +109,8 @@ impl ClientAdapter for ClaudeCodeAdapter {
                     }
                     if *transport == crate::state::RemoteTransport::Sse {
                         obj.insert("type".to_string(), Value::String("sse".to_string()));
+                    } else {
+                        obj.insert("type".to_string(), Value::String("http".to_string()));
                     }
                     Value::Object(obj)
                 }

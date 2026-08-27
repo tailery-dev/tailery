@@ -624,6 +624,7 @@ mod tests {
             ProfileConfig {
                 enabled_servers: vec!["web-search".to_string()],
                 enabled_clients: vec!["zed".to_string()],
+                include_project_mcps: true,
             },
         );
 
@@ -643,6 +644,7 @@ mod tests {
             containers: Vec::new(),
             container_logs: Vec::new(),
             inspector_events: Vec::new(),
+            managed_servers: HashMap::new(),
         };
 
         let active_servers = state.get_active_profile_servers();

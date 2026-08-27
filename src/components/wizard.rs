@@ -42,8 +42,6 @@ pub fn parse_client_selection(input: &str) -> Vec<String> {
     let trimmed = input.trim().to_lowercase();
     if trimmed.is_empty() || trimmed == "all" || trimmed == "*" {
         return vec![
-            "cursor".to_string(),
-            "claude_code".to_string(),
             "zed".to_string(),
             "antigravity".to_string(),
         ];
@@ -59,22 +57,12 @@ pub fn parse_client_selection(input: &str) -> Vec<String> {
             continue;
         }
         match p {
-            "1" | "cursor" => {
-                if !selected.contains(&"cursor".to_string()) {
-                    selected.push("cursor".to_string());
-                }
-            }
-            "2" | "claude" | "claude_code" | "claude-code" => {
-                if !selected.contains(&"claude_code".to_string()) {
-                    selected.push("claude_code".to_string());
-                }
-            }
-            "3" | "zed" => {
+            "1" | "zed" => {
                 if !selected.contains(&"zed".to_string()) {
                     selected.push("zed".to_string());
                 }
             }
-            "4" | "antigravity" | "agy" | "google_antigravity" | "google-antigravity" => {
+            "2" | "antigravity" | "agy" | "google_antigravity" | "google-antigravity" => {
                 if !selected.contains(&"antigravity".to_string()) {
                     selected.push("antigravity".to_string());
                 }
@@ -91,13 +79,20 @@ pub fn parse_client_selection(input: &str) -> Vec<String> {
 }
 
 #[derive(Debug, Clone)]
-
-#[derive(Default)]
 pub struct NewProfileWizard {
     pub current_step: usize,
     pub history: Vec<AnsweredStep>,
     pub input_buffer: String,
     pub active_profile_name: String,
+    pub client_options: Vec<String>,
+    pub client_selections: Vec<bool>,
+    pub focused_client_idx: usize,
+}
+
+impl Default for NewProfileWizard {
+    fn default() -> Self {
+        Self::new("default")
+    }
 }
 
 impl NewProfileWizard {
@@ -107,6 +102,9 @@ impl NewProfileWizard {
             history: Vec::new(),
             input_buffer: String::new(),
             active_profile_name: active_profile.to_string(),
+            client_options: vec!["Zed".to_string(), "Google Antigravity".to_string()],
+            client_selections: vec![true, true],
+            focused_client_idx: 0,
         }
     }
 
@@ -120,13 +118,11 @@ impl NewProfileWizard {
             },
             1 => PromptStep {
                 question: "Select enabled AI / IDE clients".to_string(),
-                hint: Some("e.g. 1,2 or cursor,zed or all (default: all)".to_string()),
+                hint: Some("e.g. 1,2 or zed,agy or all (default: all)".to_string()),
                 default_value: Some("all".to_string()),
                 options: vec![
-                    "1) Cursor".to_string(),
-                    "2) Claude Code".to_string(),
-                    "3) Zed".to_string(),
-                    "4) Google Antigravity".to_string(),
+                    "1) Zed".to_string(),
+                    "2) Google Antigravity".to_string(),
                 ],
             },
             2 => PromptStep {
@@ -156,6 +152,29 @@ impl NewProfileWizard {
 
     pub fn handle_backspace(&mut self) {
         self.input_buffer.pop();
+    }
+
+    pub fn handle_up(&mut self) {
+        if self.current_step == 1 && self.focused_client_idx > 0 {
+            self.focused_client_idx -= 1;
+        }
+    }
+
+    pub fn handle_down(&mut self) {
+        if self.current_step == 1 && self.focused_client_idx + 1 < self.client_options.len() {
+            self.focused_client_idx += 1;
+        }
+    }
+
+    pub fn handle_space(&mut self) {
+        if self.current_step == 1 {
+            let idx = self.focused_client_idx;
+            if idx < self.client_selections.len() {
+                self.client_selections[idx] = !self.client_selections[idx];
+            }
+        } else {
+            self.input_buffer.push(' ');
+        }
     }
 
     pub fn submit(&mut self) -> Option<(String, Vec<String>, bool, bool)> {
@@ -1046,10 +1065,10 @@ mod tests {
         wizard.handle_char('k');
         assert_eq!(wizard.submit(), None);
 
-        // Step 1: Enabled clients (type "1,3" -> cursor, zed)
+        // Step 1: Enabled clients (type "1,2" -> zed, antigravity)
         wizard.handle_char('1');
         wizard.handle_char(',');
-        wizard.handle_char('3');
+        wizard.handle_char('2');
         assert_eq!(wizard.submit(), None);
 
         // Step 2: Copy servers (default 'y')
@@ -1060,7 +1079,7 @@ mod tests {
         assert!(result.is_some());
         let (name, enabled_clients, copy_servers, activate_now) = result.unwrap();
         assert_eq!(name, "work");
-        assert_eq!(enabled_clients, vec!["cursor", "zed"]);
+        assert_eq!(enabled_clients, vec!["zed", "antigravity"]);
         assert!(copy_servers);
         assert!(activate_now);
     }
@@ -1069,19 +1088,19 @@ mod tests {
     fn test_parse_client_selection_options() {
         assert_eq!(
             parse_client_selection("all"),
-            vec!["cursor", "claude_code", "zed", "antigravity"]
+            vec!["zed", "antigravity"]
         );
         assert_eq!(
             parse_client_selection(""),
-            vec!["cursor", "claude_code", "zed", "antigravity"]
+            vec!["zed", "antigravity"]
         );
         assert_eq!(
-            parse_client_selection("1, 4"),
-            vec!["cursor", "antigravity"]
+            parse_client_selection("1, 2"),
+            vec!["zed", "antigravity"]
         );
         assert_eq!(
-            parse_client_selection("claude,zed"),
-            vec!["claude_code", "zed"]
+            parse_client_selection("agy,zed"),
+            vec!["antigravity", "zed"]
         );
         assert!(parse_client_selection("none").is_empty());
     }

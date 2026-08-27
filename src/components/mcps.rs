@@ -922,6 +922,7 @@ mod tests {
             containers: Vec::new(),
             container_logs: Vec::new(),
             inspector_events: Vec::new(),
+            managed_servers: HashMap::new(),
         };
 
         // Add an extra running container with ports (like web-search)

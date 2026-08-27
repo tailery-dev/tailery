@@ -961,6 +961,7 @@ mod tests {
             containers: Vec::new(),
             container_logs: Vec::new(),
             inspector_events: Vec::new(),
+            managed_servers: HashMap::new(),
         };
 
         // 1. Cursor adapter index = 0
