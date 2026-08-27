@@ -10,7 +10,28 @@ use tracing::error;
 
 use crate::{action::Action, app::Mode};
 
-const CONFIG: &str = include_str!("../.config/config.json5");
+const CONFIG: &str = r#"{
+  "keybindings": {
+    "Clients": {
+      "<q>": "Quit",
+      "<Ctrl-d>": "Quit",
+      "<Ctrl-c>": "Quit",
+      "<Ctrl-z>": "Suspend"
+    },
+    "Mcps": {
+      "<q>": "Quit",
+      "<Ctrl-d>": "Quit",
+      "<Ctrl-c>": "Quit",
+      "<Ctrl-z>": "Suspend"
+    },
+    "Skills": {
+      "<q>": "Quit",
+      "<Ctrl-d>": "Quit",
+      "<Ctrl-c>": "Quit",
+      "<Ctrl-z>": "Suspend"
+    }
+  }
+}"#;
 
 #[derive(Clone, Debug, Deserialize, Default)]
 pub struct AppConfig {

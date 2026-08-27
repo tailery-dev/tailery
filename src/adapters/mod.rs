@@ -306,10 +306,7 @@ pub fn tailery_srv_matches(a: &ServerConfig, b: &ServerConfig) -> bool {
                 return true;
             }
             let has_same_server_label = a2.iter().any(|arg| arg.contains("dev.tailery.server="));
-            if c2.as_deref() == Some("docker") && has_same_server_label {
-                return true;
-            }
-            false
+            c2.as_deref() == Some("docker") && has_same_server_label
         }
         _ => false,
     }

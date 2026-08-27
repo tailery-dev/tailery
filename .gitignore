@@ -2,6 +2,5 @@
 .data/*.log
 .data
 .backup
-.config/*
-!.config/config.json5
+.config
 
