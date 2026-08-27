@@ -942,8 +942,7 @@ mod tests {
             "default".to_string(),
             ProfileConfig {
                 enabled_servers: vec!["active-server".to_string()],
-                enabled_clients: vec!["cursor".to_string()],
-            },
+                enabled_clients: vec!["cursor".to_string()], include_project_mcps: false },
         );
 
         let mut state = AppState {

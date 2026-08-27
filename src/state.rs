@@ -230,6 +230,7 @@ impl Default for ProfileConfig {
         Self {
             enabled_servers: Vec::new(),
             enabled_clients: default_enabled_clients(),
+            include_project_mcps: false,
         }
     }
 }
@@ -239,6 +240,7 @@ impl ProfileConfig {
         Self {
             enabled_servers,
             enabled_clients,
+            include_project_mcps: false,
         }
     }
 
@@ -246,6 +248,7 @@ impl ProfileConfig {
         Self {
             enabled_servers,
             enabled_clients: default_enabled_clients(),
+            include_project_mcps: false,
         }
     }
 

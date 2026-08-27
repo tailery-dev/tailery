@@ -317,6 +317,7 @@ impl App {
                 containers: Vec::new(),
                 container_logs: Vec::new(),
                 inspector_events: Vec::new(),
+                managed_servers: Default::default(),
             })
         } else {
             AppState {
@@ -335,6 +336,7 @@ impl App {
                 containers: Vec::new(),
                 container_logs: Vec::new(),
                 inspector_events: Vec::new(),
+                managed_servers: Default::default(),
             }
         };
 
@@ -643,8 +645,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(),
-                });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
             let is_enabled = profile.toggle_client(client_name);
             self.save_config();
             if is_enabled {
@@ -674,8 +675,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(),
-                });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
             profile.disable_client(client_name);
             self.save_config();
             self.set_status(format!(
@@ -697,8 +697,7 @@ impl App {
                 .entry(active_prof.clone())
                 .or_insert_with(|| ProfileConfig {
                     enabled_servers: Vec::new(),
-                    enabled_clients: crate::state::default_enabled_clients(),
-                });
+                    enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
             let is_enabled = profile.toggle_server(&name);
             self.save_config();
             if is_enabled {

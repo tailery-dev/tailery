@@ -145,6 +145,7 @@ fn load_or_create_config(path_override: Option<&Path>) -> (AppState, PathBuf) {
         containers: Vec::new(),
         container_logs: Vec::new(),
         inspector_events: Vec::new(),
+        managed_servers: std::collections::HashMap::new(),
     };
 
     let _ = save_config_to_path(&app_cfg, &config_path);
@@ -481,8 +482,7 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(),
-                        });
+                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
                 prof.enable_client(&client);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Enabled client '{}' in profile '{}'", client, prof_name);
@@ -495,8 +495,7 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(),
-                        });
+                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
                 prof.disable_client(&client);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Disabled client '{}' in profile '{}'", client, prof_name);
@@ -509,8 +508,7 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(),
-                        });
+                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
                 prof.enable_server(&server);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Enabled server '{}' in profile '{}'", server, prof_name);
@@ -523,8 +521,7 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(),
-                        });
+                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false });
                 prof.disable_server(&server);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Disabled server '{}' in profile '{}'", server, prof_name);
