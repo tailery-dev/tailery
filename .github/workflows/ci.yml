@@ -6,64 +6,48 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-
-  test:
-    name: Test Suite
+  lint:
+    name: Lint & Format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - uses: Swatinem/rust-cache@v2
-      - name: Install just
-        uses: extractions/setup-just@v2
-      - name: Run tests
-        run: just test --locked --all-features --workspace
 
-  rustfmt:
-    name: Rustfmt
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: rustfmt
+      - name: Ensure clippy and rustfmt
+        run: rustup component add clippy rustfmt
+
       - uses: Swatinem/rust-cache@v2
-      - name: Install just
-        uses: extractions/setup-just@v2
+
       - name: Check formatting
-        run: just fmt --all
+        run: cargo fmt --all -- --check
 
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Install just
-        uses: extractions/setup-just@v2
       - name: Clippy check
-        run: just clippy --all-features --workspace
+        run: cargo clippy --all-features --workspace -- -D warnings
 
-  docs:
-    name: Docs
+  test-and-docs:
+    name: Tests & Documentation
     runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
+
       - uses: Swatinem/rust-cache@v2
-      - name: Install just
-        uses: extractions/setup-just@v2
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Run tests
+        run: cargo nextest run --locked --all-features --workspace
+
       - name: Check documentation
-        run: just doc
+        run: cargo doc --no-deps --document-private-items --all-features --workspace
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+
