@@ -612,24 +612,21 @@ impl App {
     pub fn sync_all_clients(&mut self) {
         let mut synced = 0;
         let active_prof = self.app_state.settings.active_profile.clone();
-        let servers = self.app_state.get_active_profile_servers();
-
-        for adapter in all_adapters() {
+        
+        for adapter in crate::adapters::all_adapters() {
             if !self
                 .app_state
                 .is_client_enabled_in_active_profile(adapter.name())
             {
                 continue;
             }
-            if let Ok(path) = adapter.config_path(None) {
-                if adapter.write_servers(&active_prof, &path, &servers).is_ok() {
-                    synced += 1;
-                }
+            if let Ok(count) = adapter.sync_servers(&active_prof, &self.app_state.managed_servers) {
+                synced += count;
             }
         }
         self.refresh_all_client_diffs();
         self.set_status(format!(
-            "✔ Synced MCP configuration to {} enabled client(s) in profile '{}'",
+            "✔ Synced MCP configuration to {} file(s) across enabled clients in profile '{}'",
             synced, active_prof
         ));
     }

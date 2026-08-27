@@ -426,6 +426,158 @@ impl ClientAdapter for ClaudeCodeAdapter {
         Ok(discovered)
     }
 
+    fn sync_servers(
+        &self,
+        profile: &str,
+        managed_servers: &HashMap<String, crate::state::ManagedServer>,
+    ) -> Result<usize, AdapterError> {
+        let global_path = self.config_path(None)?;
+        let mut synced_count = 0;
+
+        // Group servers
+        let mut global_servers = HashMap::new();
+        let mut global_project_servers: HashMap<String, HashMap<String, ServerConfig>> = HashMap::new();
+        let mut in_repo_servers: HashMap<PathBuf, HashMap<String, ServerConfig>> = HashMap::new();
+
+        for (name, srv) in managed_servers {
+            if srv.is_global {
+                global_servers.insert(name.clone(), srv.config.clone());
+            } else {
+                for path in &srv.client_global_project_paths {
+                    global_project_servers
+                        .entry(path.to_string_lossy().to_string())
+                        .or_default()
+                        .insert(name.clone(), srv.config.clone());
+                }
+                for path in &srv.in_repo_paths {
+                    in_repo_servers
+                        .entry(path.clone())
+                        .or_default()
+                        .insert(name.clone(), srv.config.clone());
+                }
+            }
+        }
+
+        // 1. Sync ~/.claude.json (Global and Global-Per-Project)
+        if global_path.exists() {
+            let _ = crate::backup::create_backup(profile, self.name(), &global_path);
+        }
+
+        let existing_json: Option<serde_json::Value> = if global_path.exists() {
+            let content = std::fs::read_to_string(&global_path).map_err(|source| AdapterError::Io {
+                adapter: self.name(),
+                source,
+            })?;
+            Some(super::parse_json_relaxed(&content))
+        } else {
+            None
+        };
+
+        let mut root = match existing_json {
+            Some(Value::Object(map)) => Value::Object(map.clone()),
+            _ => json!({}),
+        };
+
+        // Helper to prune and merge managed servers into a target JSON object
+        let update_mcp_servers_map = |target_map: &mut serde_json::Map<String, Value>, managed_to_merge: &HashMap<String, ServerConfig>| {
+            let mut keys_to_remove = Vec::new();
+            for (k, v) in target_map.iter() {
+                let is_tailery_managed = if managed_to_merge.contains_key(k) {
+                    true
+                } else if let Some(cmd) = v.get("command").and_then(|c| c.as_str()) {
+                    if cmd == "docker" {
+                        if let Some(args) = v.get("args").and_then(|a| a.as_array()) {
+                            args.iter().any(|arg| arg.as_str().map_or(false, |s| s.contains("dev.tailery.managed=true") || s.contains("dev.tailery.server=")))
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+                if is_tailery_managed && !managed_to_merge.contains_key(k) {
+                    keys_to_remove.push(k.clone());
+                }
+            }
+            for k in keys_to_remove {
+                target_map.remove(&k);
+            }
+            
+            if let Ok(generated) = self.generate_config(managed_to_merge) {
+                if let Some(new_mcp_servers) = generated.get("mcpServers").and_then(|v| v.as_object()) {
+                    for (k, v) in new_mcp_servers {
+                        target_map.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        };
+
+        if let Some(root_map) = root.as_object_mut() {
+            // A) Update Top-Level Global mcpServers
+            let mut target_mcp_servers = if let Some(existing_servers) = root_map.get("mcpServers").and_then(|v| v.as_object()) {
+                existing_servers.clone()
+            } else {
+                serde_json::Map::new()
+            };
+            update_mcp_servers_map(&mut target_mcp_servers, &global_servers);
+            root_map.insert("mcpServers".to_string(), Value::Object(target_mcp_servers));
+
+            // B) Update $.projects["<cwd>"].mcpServers
+            let mut target_projects = if let Some(existing_projects) = root_map.get("projects").and_then(|v| v.as_object()) {
+                existing_projects.clone()
+            } else {
+                serde_json::Map::new()
+            };
+
+            for (proj_path, proj_servers) in global_project_servers {
+                let mut proj_obj = if let Some(existing_proj) = target_projects.get(&proj_path).and_then(|v| v.as_object()) {
+                    existing_proj.clone()
+                } else {
+                    serde_json::Map::new()
+                };
+
+                let mut proj_mcp_servers = if let Some(existing_mcp_servers) = proj_obj.get("mcpServers").and_then(|v| v.as_object()) {
+                    existing_mcp_servers.clone()
+                } else {
+                    serde_json::Map::new()
+                };
+
+                update_mcp_servers_map(&mut proj_mcp_servers, &proj_servers);
+                proj_obj.insert("mcpServers".to_string(), Value::Object(proj_mcp_servers));
+                
+                let has_local_stdio = proj_servers.values().any(|s| {
+                    matches!(s, ServerConfig::Local { transport: crate::state::LocalTransport::Stdio, .. })
+                });
+                if has_local_stdio && !proj_obj.contains_key("hasTrustDialogAccepted") {
+                    proj_obj.insert("hasTrustDialogAccepted".to_string(), Value::Bool(true));
+                }
+
+                target_projects.insert(proj_path, Value::Object(proj_obj));
+            }
+            root_map.insert("projects".to_string(), Value::Object(target_projects));
+        }
+
+        if let Some(parent) = global_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        if let Ok(formatted) = serde_json::to_string_pretty(&root) {
+            let _ = std::fs::write(&global_path, formatted);
+            synced_count += 1;
+        }
+
+        // 2. Sync In-Repo .mcp.json files
+        for (ws_path, servers) in in_repo_servers {
+            let proj_path = ws_path.join(".mcp.json");
+            if let Ok(_) = self.write_servers(profile, &proj_path, &servers) {
+                synced_count += 1;
+            }
+        }
+
+        Ok(synced_count)
+    }
+
     fn detect_installed(&self) -> bool {
         if let Some(home) = dirs::home_dir() {
             home.join(".claude").exists()
