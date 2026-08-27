@@ -1,0 +1,304 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Tailery Documentation</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="index.html"><strong aria-hidden="true">1.</strong> Introduction</a></li><li class="chapter-item expanded "><a href="usage.html"><strong aria-hidden="true">2.</strong> Example Usage</a></li><li class="chapter-item expanded "><a href="architecture.html"><strong aria-hidden="true">3.</strong> How it Works</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Tailery Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/tailery-dev/tailery" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="tailery"><a class="header" href="#tailery">Tailery</a></h1>
+<p>Welcome to the <strong>Tailery</strong> documentation!</p>
+<p>Tailery is an open-source Model Context Protocol (MCP) and skill manager tailored for Coding Assistants. Whether you are using Cursor, Claude Code, Zed, or Antigravity, Tailery acts as the central hub connecting all your tools, sandboxes, and integrations to your AI assistants.</p>
+<h2 id="why-tailery"><a class="header" href="#why-tailery">Why Tailery?</a></h2>
+<p>As the Model Context Protocol (MCP) ecosystem grows, managing server configurations for different IDEs and tools becomes repetitive and error-prone. Tailery solves this by providing:</p>
+<ol>
+<li><strong>A Single Source of Truth</strong>: Configure your MCP servers and AI skills once in Tailery.</li>
+<li><strong>Seamless Syncing</strong>: Sync your configurations instantly to supported IDEs and CLI tools.</li>
+<li><strong>Beautiful TUI</strong>: A built-in Terminal User Interface (TUI) to toggle tools on and off.</li>
+<li><strong>Sandboxed Environments</strong>: Native Docker integration to run your servers in isolated environments securely.</li>
+</ol>
+<p>Dive into the <a href="./usage.html">Example Usage</a> section to see how Tailery can supercharge your coding assistants!</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="example-usage"><a class="header" href="#example-usage">Example Usage</a></h1>
+<p>Tailery provides both a rich Terminal User Interface (TUI) and a powerful CLI.</p>
+<h2 id="starting-the-tui"><a class="header" href="#starting-the-tui">Starting the TUI</a></h2>
+<p>To launch the interactive TUI, simply run:</p>
+<pre><code class="language-bash">tailery
+</code></pre>
+<p>or</p>
+<pre><code class="language-bash">tailery tui
+</code></pre>
+<p>From the TUI, you can view your configured servers, monitor Docker container status, and toggle skills dynamically.</p>
+<h2 id="using-the-cli"><a class="header" href="#using-the-cli">Using the CLI</a></h2>
+<p>If you prefer command-line automation, Tailery has you covered.</p>
+<h3 id="listing-configurations"><a class="header" href="#listing-configurations">Listing Configurations</a></h3>
+<p>To see all profiles, servers, and connected IDEs:</p>
+<pre><code class="language-bash">tailery list
+</code></pre>
+<h3 id="managing-profiles"><a class="header" href="#managing-profiles">Managing Profiles</a></h3>
+<p>Profiles allow you to group servers together. For example, you might want a <code>work</code> profile and a <code>personal</code> profile.</p>
+<pre><code class="language-bash"># Create a new profile and switch to it
+tailery profile create --name work --switch
+
+# Enable a server for the active profile
+tailery profile enable-server --server github-context
+
+# Switch back to default
+tailery profile switch --name default
+</code></pre>
+<h3 id="synchronizing-with-coding-assistants"><a class="header" href="#synchronizing-with-coding-assistants">Synchronizing with Coding Assistants</a></h3>
+<p>Once you have your profile configured, you can push the configuration to all your installed coding assistants (Cursor, Zed, etc.):</p>
+<pre><code class="language-bash">tailery sync
+</code></pre>
+<p>You can also target a specific client:</p>
+<pre><code class="language-bash">tailery sync --client cursor
+</code></pre>
+<h3 id="backing-up-and-restoring"><a class="header" href="#backing-up-and-restoring">Backing Up and Restoring</a></h3>
+<p>Tailery automatically manages backups of your IDE configurations before overwriting them, ensuring you never lose your old settings.</p>
+<pre><code class="language-bash"># Create a manual backup
+tailery backup create
+
+# List all stored backups
+tailery backup list
+
+# Restore the latest backup for a specific client
+tailery backup restore --client cursor
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="how-it-works"><a class="header" href="#how-it-works">How it Works</a></h1>
+<p>Tailery is built entirely in <strong>Rust</strong> for maximum performance and safety. It acts as an intermediary layer between your MCP servers and your Coding Assistants.</p>
+<h2 id="architecture-overview"><a class="header" href="#architecture-overview">Architecture Overview</a></h2>
+<p>At a high level, Tailery works through three main concepts:</p>
+<h3 id="1-state-and-profiles-srcstaters"><a class="header" href="#1-state-and-profiles-srcstaters">1. State and Profiles (<code>src/state.rs</code>)</a></h3>
+<p>Tailery maintains an <code>AppState</code> containing all your servers, skills, and settings. To allow for flexible workflows, Tailery introduces <strong>Profiles</strong>. A Profile determines which MCP servers and clients are enabled at any given time.</p>
+<h3 id="2-client-adapters-srcadapters"><a class="header" href="#2-client-adapters-srcadapters">2. Client Adapters (<code>src/adapters/</code>)</a></h3>
+<p>Different IDEs store their MCP configurations in different formats and locations.</p>
+<ul>
+<li><strong>Cursor</strong> uses a JSON file at <code>~/.cursor/mcp.json</code> (or similar depending on OS).</li>
+<li><strong>Claude Code</strong> and <strong>Zed</strong> have their own configuration structures.</li>
+</ul>
+<p>Tailery abstracts this away using <strong>Adapters</strong>. When you run <code>tailery sync</code>, it iterates over all supported adapters, reads the active profile, translates the unified server configurations into the IDE's specific format, and safely writes to the IDE's config file.</p>
+<h3 id="3-shim-interceptor-srcshimrs"><a class="header" href="#3-shim-interceptor-srcshimrs">3. Shim Interceptor (<code>src/shim.rs</code>)</a></h3>
+<p>To provide fine-grained control and security over what your AI assistants can do, Tailery acts as a <strong>Shim</strong>. Instead of the IDE communicating directly with the MCP server, Tailery can wrap the execution.</p>
+<p>This allows Tailery to enforce <strong>Tool Filters</strong>:</p>
+<ul>
+<li><code>allow</code>: Only permit specific tools (e.g., <code>read_file</code>).</li>
+<li><code>deny</code>: Block dangerous tools (e.g., <code>delete_file</code>).</li>
+<li><code>auto_approve</code>: Skip manual confirmations for safe tools.</li>
+</ul>
+<h3 id="4-docker-integration-srcdockerrs"><a class="header" href="#4-docker-integration-srcdockerrs">4. Docker Integration (<code>src/docker.rs</code>)</a></h3>
+<p>For local servers that require isolation, Tailery natively integrates with the Docker socket. It can automatically pull images, mount necessary workspaces, set resource limits (CPU/Memory), and start MCP servers inside ephemeral containers, passing the I/O streams securely back to the IDE.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+    </div>
+    </body>
+</html>
