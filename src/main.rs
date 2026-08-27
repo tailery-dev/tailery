@@ -7,8 +7,8 @@ use crate::adapters::all_adapters;
 use crate::app::App;
 use crate::shim::{HttpShimInterceptor, ShimInterceptor};
 use crate::state::{
-    AppState, ContainerConfig, GlobalSettings, MountConfig, ProfileConfig,
-    ResourceLimits, ServerConfig, ToolFilter, resolve_config_path, save_config_to_path,
+    AppState, ContainerConfig, GlobalSettings, MountConfig, ProfileConfig, ResourceLimits,
+    ServerConfig, ToolFilter, resolve_config_path, save_config_to_path,
 };
 
 mod action;
@@ -19,9 +19,9 @@ mod cli;
 mod components;
 mod config;
 mod docker;
-mod scanner;
 mod errors;
 mod logging;
+mod scanner;
 mod shim;
 mod state;
 mod tui;
@@ -40,12 +40,11 @@ fn parse_client_selection(s: &str) -> Vec<String> {
 fn load_or_create_config(path_override: Option<&Path>) -> (AppState, PathBuf) {
     let config_path = resolve_config_path(path_override);
 
-    if config_path.exists() {
-        if let Ok(content) = std::fs::read_to_string(&config_path) {
-            if let Ok(cfg) = serde_json::from_str::<AppState>(&content) {
-                return (cfg, config_path);
-            }
-        }
+    if config_path.exists()
+        && let Ok(content) = std::fs::read_to_string(&config_path)
+        && let Ok(cfg) = serde_json::from_str::<AppState>(&content)
+    {
+        return (cfg, config_path);
     }
 
     // Default sample configuration showcasing stdio (containerized with shim), streamable-http, and managed containers
@@ -240,15 +239,15 @@ async fn main() -> color_eyre::Result<()> {
                     if adapter.name() != target.to_lowercase() {
                         continue;
                     }
-                } else if let Some(p) = profile_cfg {
-                    if !p.is_client_enabled(adapter.name()) {
-                        println!(
-                            "  ○ {:<14} (Disabled in profile '{}', skipping)",
-                            adapter.display_name(),
-                            target_profile
-                        );
-                        continue;
-                    }
+                } else if let Some(p) = profile_cfg
+                    && !p.is_client_enabled(adapter.name())
+                {
+                    println!(
+                        "  ○ {:<14} (Disabled in profile '{}', skipping)",
+                        adapter.display_name(),
+                        target_profile
+                    );
+                    continue;
                 }
 
                 match adapter.config_path(None) {
@@ -305,10 +304,10 @@ async fn main() -> color_eyre::Result<()> {
                 );
 
                 for adapter in adapters {
-                    if let Some(ref target) = client {
-                        if adapter.name() != target.to_lowercase() {
-                            continue;
-                        }
+                    if let Some(ref target) = client
+                        && adapter.name() != target.to_lowercase()
+                    {
+                        continue;
                     }
                     match adapter.config_path(None) {
                         Ok(path) => {
@@ -483,7 +482,10 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                            enabled_clients: crate::state::default_enabled_clients(),
+                            include_project_mcps: false,
+                            project_search_paths: Vec::new(),
+                        });
                 prof.enable_client(&client);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Enabled client '{}' in profile '{}'", client, prof_name);
@@ -496,7 +498,10 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                            enabled_clients: crate::state::default_enabled_clients(),
+                            include_project_mcps: false,
+                            project_search_paths: Vec::new(),
+                        });
                 prof.disable_client(&client);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Disabled client '{}' in profile '{}'", client, prof_name);
@@ -509,7 +514,10 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                            enabled_clients: crate::state::default_enabled_clients(),
+                            include_project_mcps: false,
+                            project_search_paths: Vec::new(),
+                        });
                 prof.enable_server(&server);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Enabled server '{}' in profile '{}'", server, prof_name);
@@ -522,7 +530,10 @@ async fn main() -> color_eyre::Result<()> {
                         .entry(prof_name.clone())
                         .or_insert_with(|| ProfileConfig {
                             enabled_servers: Vec::new(),
-                            enabled_clients: crate::state::default_enabled_clients(), include_project_mcps: false, project_search_paths: Vec::new() });
+                            enabled_clients: crate::state::default_enabled_clients(),
+                            include_project_mcps: false,
+                            project_search_paths: Vec::new(),
+                        });
                 prof.disable_server(&server);
                 let _ = save_config_to_path(&config, &config_path);
                 println!("✔ Disabled server '{}' in profile '{}'", server, prof_name);
@@ -646,7 +657,10 @@ async fn main() -> color_eyre::Result<()> {
             }
 
             println!("\nMCP Servers:");
-            println!("{:<24} {:<10} {:<18} {:<12}", "SERVER NAME", "SCOPE", "TRANSPORT", "STATUS");
+            println!(
+                "{:<24} {:<10} {:<18} {:<12}",
+                "SERVER NAME", "SCOPE", "TRANSPORT", "STATUS"
+            );
             println!("{}", "-".repeat(68));
             for (name, s) in &config.servers {
                 let scope = match s {
@@ -672,7 +686,10 @@ async fn main() -> color_eyre::Result<()> {
                         crate::state::RemoteTransport::Sse => "sse",
                     },
                 };
-                println!("{:<24} {:<10} {:<18} {:<12}", name, scope, transport, "configured");
+                println!(
+                    "{:<24} {:<10} {:<18} {:<12}",
+                    name, scope, transport, "configured"
+                );
             }
         }
     }

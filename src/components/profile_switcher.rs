@@ -5,16 +5,11 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Paragraph, Row, Table, StatefulWidget},
+    widgets::{Block, BorderType, Borders, Paragraph, Row, StatefulWidget, Table},
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{
-    action::Action,
-    components::Component,
-    state::AppState,
-    tui::Event,
-};
+use crate::{action::Action, components::Component, state::AppState, tui::Event};
 
 #[derive(Default)]
 pub struct ProfileSwitcher {

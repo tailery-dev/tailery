@@ -166,14 +166,11 @@ pub fn list_backups(
                     scan_dir(&path, entries);
                 } else if path.extension().and_then(|ext| ext.to_str()) == Some("json")
                     && path.to_string_lossy().ends_with(".meta.json")
+                    && let Ok(content) = fs::read_to_string(&path)
+                    && let Ok(parsed) = serde_json::from_str::<BackupEntry>(&content)
+                    && parsed.backup_path.exists()
                 {
-                    if let Ok(content) = fs::read_to_string(&path) {
-                        if let Ok(parsed) = serde_json::from_str::<BackupEntry>(&content) {
-                            if parsed.backup_path.exists() {
-                                entries.push(parsed);
-                            }
-                        }
-                    }
+                    entries.push(parsed);
                 }
             }
         }
@@ -185,10 +182,10 @@ pub fn list_backups(
     let cli_norm = client_filter.map(|c| c.to_lowercase().trim().to_string());
 
     entries.retain(|e| {
-        if let Some(ref p) = prof_norm {
-            if e.profile.to_lowercase() != *p {
-                return false;
-            }
+        if let Some(ref p) = prof_norm
+            && e.profile.to_lowercase() != *p
+        {
+            return false;
         }
         if let Some(ref c) = cli_norm {
             let e_c = e.client.to_lowercase();
