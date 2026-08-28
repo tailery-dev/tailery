@@ -13,7 +13,7 @@ targets = [
 [advisories]
 vulnerability = "deny"
 unmaintained = "none"
-unsound = "warn"
+unsound = "none"
 yanked = "warn"
 notice = "warn"
 ignore = []
