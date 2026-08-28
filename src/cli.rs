@@ -98,6 +98,19 @@ pub enum Commands {
 
     /// List configured MCP servers, active profiles, and containers
     List,
+
+    /// Generate shell auto-completions for bash, zsh, fish, or powershell
+    Completions {
+        /// Target shell (bash, zsh, fish, powershell, elvish)
+        shell: clap_complete::Shell,
+
+        /// Output directory to write completion files to (defaults to stdout if omitted)
+        #[arg(short, long)]
+        out_dir: Option<PathBuf>,
+    },
+
+    /// Run comprehensive diagnostics and health checks on system, Docker, adapters, and configs
+    Doctor,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -238,4 +251,36 @@ Authors: {author}
 Config directory: {config_dir_path}
 Data directory: {data_dir_path}"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn test_cli_debug_and_version() {
+        let v = version();
+        assert!(!v.is_empty());
+    }
+
+    #[test]
+    fn test_shell_completions_generation() {
+        let shells = [
+            clap_complete::Shell::Bash,
+            clap_complete::Shell::Elvish,
+            clap_complete::Shell::Fish,
+            clap_complete::Shell::PowerShell,
+            clap_complete::Shell::Zsh,
+        ];
+
+        for shell in shells {
+            let mut cmd = Cli::command();
+            let mut buffer = Vec::new();
+            clap_complete::generate(shell, &mut cmd, "tailery", &mut buffer);
+            assert!(!buffer.is_empty());
+            let out_str = String::from_utf8(buffer).expect("Valid UTF-8 completions");
+            assert!(out_str.contains("tailery"));
+        }
+    }
 }

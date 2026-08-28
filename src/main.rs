@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use cli::{BackupCommands, Cli, Commands, ProfileSubcommands};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -19,6 +19,7 @@ mod cli;
 mod components;
 mod config;
 mod docker;
+mod doctor;
 mod errors;
 mod logging;
 mod scanner;
@@ -690,6 +691,27 @@ async fn main() -> color_eyre::Result<()> {
                     "{:<24} {:<10} {:<18} {:<12}",
                     name, scope, transport, "configured"
                 );
+            }
+        }
+        Some(Commands::Doctor) => {
+            let report = crate::doctor::run_doctor(cli.config.as_deref()).await?;
+            if report.errors > 0 {
+                std::process::exit(1);
+            }
+        }
+        Some(Commands::Completions { shell, out_dir }) => {
+            let mut cmd = Cli::command();
+            let bin_name = "tailery";
+            if let Some(dir) = out_dir {
+                std::fs::create_dir_all(&dir)?;
+                let file_path = clap_complete::generate_to(shell, &mut cmd, bin_name, &dir)?;
+                println!(
+                    "✔ Generated {} completion file: {}",
+                    shell,
+                    file_path.display()
+                );
+            } else {
+                clap_complete::generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
             }
         }
     }

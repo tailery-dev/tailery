@@ -48,6 +48,9 @@ release_targets := target_darwin_arm64 + " " + target_darwin_amd64 + " " + targe
     echo "    just fmt                  Check formatting (cargo fmt --check)"
     echo "    just fmt-fix              Apply formatting fixes (cargo fmt)"
     echo "    just doc                  Generate and check documentation"
+    echo "    just doctor               Run tailery doctor diagnostics"
+    echo "    just deny                 Run cargo-deny license and security audit"
+    echo "    just completions          Generate shell completions into dist/completions"
     echo "    just run [ARGS=...]       Run tailery with optional arguments"
     echo ""
     echo "  Multi-Platform Release Builds:"
@@ -69,6 +72,7 @@ release_targets := target_darwin_arm64 + " " + target_darwin_amd64 + " " + targe
     echo ""
     echo "  Setup & Cleanup:"
     echo "    just setup                Install all rustup target toolchains"
+    echo "    just install-hooks        Install Git pre-commit hook (fmt & clippy)"
     echo "    just clean                Clean target/ and {{dist_dir}}/ directories"
     echo "========================================================================"
 
@@ -103,6 +107,25 @@ alias local := build-local
 @doc *args:
     echo "==> Checking documentation..."
     RUSTDOCFLAGS="-D warnings" {{cargo}} doc --manifest-path {{manifest_path}} --no-deps --document-private-items --all-features --workspace --examples {{args}}
+
+@doctor *args:
+    echo "==> Running tailery doctor diagnostics..."
+    {{cargo}} run --manifest-path {{manifest_path}} -- doctor {{args}}
+
+@completions:
+    #!/usr/bin/env bash
+    set -e
+    mkdir -p {{dist_dir}}/completions
+    echo "==> Generating shell completion files..."
+    {{cargo}} run --manifest-path {{manifest_path}} -- completions bash --out-dir {{dist_dir}}/completions
+    {{cargo}} run --manifest-path {{manifest_path}} -- completions zsh --out-dir {{dist_dir}}/completions
+    {{cargo}} run --manifest-path {{manifest_path}} -- completions fish --out-dir {{dist_dir}}/completions
+    {{cargo}} run --manifest-path {{manifest_path}} -- completions powershell --out-dir {{dist_dir}}/completions
+    echo "==> Completions generated in {{dist_dir}}/completions/"
+
+@deny:
+    echo "==> Running cargo-deny security and license audit..."
+    cargo deny check
 
 @build-local:
     mkdir -p {{dist_dir}}
@@ -195,12 +218,13 @@ alias dist := release
     [ -f {{manifest_dir}}/README.md ] && cp {{manifest_dir}}/README.md "$PKG_SUBDIR/" || true
     [ -f {{manifest_dir}}/LICENSE-MIT ] && cp {{manifest_dir}}/LICENSE-MIT "$PKG_SUBDIR/" || true
     [ -f {{manifest_dir}}/LICENSE-APACHE ] && cp {{manifest_dir}}/LICENSE-APACHE "$PKG_SUBDIR/" || true
+    [ -d {{dist_dir}}/completions ] && cp -r {{dist_dir}}/completions "$PKG_SUBDIR/" || true
     tar -czf {{dist_dir}}/{{binary_name}}-v{{version}}-{{target}}.tar.gz -C "$TMP_PKG_DIR" "{{binary_name}}-v{{version}}-{{target}}"
     rm -rf "$TMP_PKG_DIR"
     cd {{dist_dir}} && {{sha256_cmd}} {{binary_name}}-v{{version}}-{{target}}.tar.gz > {{binary_name}}-v{{version}}-{{target}}.tar.gz.sha256
     echo "==> Package ready: {{dist_dir}}/{{binary_name}}-v{{version}}-{{target}}.tar.gz"
 
-@package-all: (package-target target_darwin_arm64) (package-target target_darwin_amd64) (package-target target_linux_arm64) (package-target target_linux_amd64)
+@package-all: completions (package-target target_darwin_arm64) (package-target target_darwin_amd64) (package-target target_linux_arm64) (package-target target_linux_amd64)
     #!/usr/bin/env bash
     set -e
     echo "==> Generating combined checksums.sha256..."
@@ -223,6 +247,28 @@ alias setup := setup-targets
     echo "==> Installing rustup target toolchains for multi-platform build..."
     rustup target add {{release_targets}}
     echo "==> All target toolchains installed."
+
+@install-hooks:
+    #!/usr/bin/env bash
+    set -e
+    GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo ".git")
+    if [ ! -d "$GIT_DIR" ]; then
+        echo "ERROR: Not inside a git repository."
+        exit 1
+    fi
+    mkdir -p "$GIT_DIR/hooks"
+    cat << 'EOF' > "$GIT_DIR/hooks/pre-commit"
+    #!/usr/bin/env bash
+    set -e
+    echo "==> Running pre-commit checks (cargo fmt & cargo clippy)..."
+    cargo fmt -- --check || { echo "❌ cargo fmt failed! Run 'cargo fmt' to fix."; exit 1; }
+    cargo clippy --all-targets -- -D warnings || { echo "❌ cargo clippy failed!"; exit 1; }
+    echo "✔ All pre-commit checks passed!"
+    EOF
+    # Remove leading spaces from heredoc
+    sed -i.bak 's/^[[:space:]]*//' "$GIT_DIR/hooks/pre-commit" && rm -f "$GIT_DIR/hooks/pre-commit.bak"
+    chmod +x "$GIT_DIR/hooks/pre-commit"
+    echo "✔ Git pre-commit hook installed successfully at: $GIT_DIR/hooks/pre-commit"
 
 @clean:
     echo "==> Cleaning build artifacts..."

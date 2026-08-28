@@ -87,6 +87,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y binutils-aarch64-linux-gnu
 
+      - name: Generate shell completions
+        shell: bash
+        run: |
+          COMP_DIR="target/${{ matrix.target }}/release/completions"
+          mkdir -p "$COMP_DIR"
+          cargo run -- completions bash --out-dir "$COMP_DIR" || true
+          cargo run -- completions zsh --out-dir "$COMP_DIR" || true
+          cargo run -- completions fish --out-dir "$COMP_DIR" || true
+          cargo run -- completions powershell --out-dir "$COMP_DIR" || true
+
       - name: Packaging final binary
         shell: bash
         run: |
@@ -102,7 +112,11 @@ jobs:
 
           RELEASE_NAME=${{ matrix.binary-name }}-${GITHUB_REF/refs\/tags\//}-${{ matrix.os-name }}-${{ matrix.architecture }}
 
-          tar czvf $RELEASE_NAME.tar.gz $BINARY_NAME
+          if [ -d "completions" ]; then
+            tar czvf $RELEASE_NAME.tar.gz $BINARY_NAME completions
+          else
+            tar czvf $RELEASE_NAME.tar.gz $BINARY_NAME
+          fi
 
           if [[ ${{ runner.os }} == 'Windows' ]]; then
             certutil -hashfile $RELEASE_NAME.tar.gz sha256 | grep -E [A-Fa-f0-9]{64} > $RELEASE_NAME.sha256
@@ -116,6 +130,7 @@ jobs:
           files: |
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.tar.gz
             target/${{ matrix.target }}/release/${{ matrix.binary-name }}-*.sha256
+            target/${{ matrix.target }}/release/completions/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -129,5 +144,3 @@ jobs:
       - run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-
-
