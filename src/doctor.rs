@@ -251,17 +251,17 @@ pub async fn run_doctor(
 }
 
 fn check_directory_access(label: &str, path: &Path, report: &mut DiagnosticReport) {
-    if !path.exists() {
-        if let Err(e) = std::fs::create_dir_all(path) {
-            println!(
-                "   ✖ {:<22} {} (Cannot create directory: {})",
-                format!("{}:", label),
-                path.display(),
-                e
-            );
-            report.record_error();
-            return;
-        }
+    if !path.exists()
+        && let Err(e) = std::fs::create_dir_all(path)
+    {
+        println!(
+            "   ✖ {:<22} {} (Cannot create directory: {})",
+            format!("{}:", label),
+            path.display(),
+            e
+        );
+        report.record_error();
+        return;
     }
 
     let test_file = path.join(".tailery_doctor_probe");

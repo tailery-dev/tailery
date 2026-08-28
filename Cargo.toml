@@ -2,7 +2,7 @@
 name = "tailery"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 description = "MCP and skill manager for Coding Assistants"
 authors = ["Vlad Fratila <vlad.fratila@gmail.com>"]
 build = "build.rs"
@@ -47,10 +47,6 @@ tokio-util = "0.7.18"
 tracing = "0.1.44"
 tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "serde"] }
-
-[build-dependencies]
-anyhow = "1.0.103"
-vergen-gix = { version = "10.0.1", features = ["build", "cargo"] }
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
 [profile.release]

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/tailery-dev/tailery/workflows/CI/badge.svg)](https://github.com/tailery-dev/tailery/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Rust](https://img.shields.io/badge/rust-1.85%2B-blue.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.88%2B-blue.svg)](https://www.rust-lang.org)
 [![Security Policy](https://img.shields.io/badge/security-policy-green.svg)](SECURITY.md)
 
 **A powerful, blazing-fast MCP and skill manager for AI Coding Assistants.**
