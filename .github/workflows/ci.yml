@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Ensure clippy and rustfmt
         run: rustup component add clippy rustfmt
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Rust 1.88.0
         uses: dtolnay/rust-toolchain@1.88.0
@@ -65,7 +65,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - uses: Swatinem/rust-cache@v2
 
@@ -80,7 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - uses: Swatinem/rust-cache@v2
 
