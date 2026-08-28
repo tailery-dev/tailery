@@ -26,8 +26,11 @@ allow = [
     "CC0-1.0",
     "OpenSSL",
     "Zlib",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
 ]
 confidence-threshold = 0.8
+unused-allowed-license = "allow"
 exceptions = []
 
 [bans]
