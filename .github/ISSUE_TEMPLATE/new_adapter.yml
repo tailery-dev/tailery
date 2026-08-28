@@ -1,0 +1,69 @@
+name: 🔌 Propose New AI Client Adapter
+description: Request or propose support for a new AI coding assistant or client
+title: "[ADAPTER]: Support for "
+labels: ["adapter", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tailery supports modular adapters (Cursor, Claude Code, Zed, Antigravity). Use this form to propose support for another AI assistant or editor!
+
+  - type: input
+    id: client-name
+    attributes:
+      label: Client / Assistant Name
+      placeholder: "e.g. Continue.dev, Roo Code, Windsurf, Copilot Workspace"
+    validations:
+      required: true
+
+  - type: input
+    id: website
+    attributes:
+      label: Client Website / Repository
+      placeholder: "https://github.com/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: config-paths
+    attributes:
+      label: MCP Configuration File Path(s)
+      description: Where does this client store its MCP configuration on macOS, Linux, and Windows?
+      placeholder: |
+        macOS: ~/Library/Application Support/...
+        Linux: ~/.config/...
+        Windows: %APPDATA%/...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: format
+    attributes:
+      label: Configuration Format
+      options:
+        - JSON
+        - JSON with Comments (JSONC) / JSON5
+        - TOML
+        - YAML
+        - SQLite / DB
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema-example
+    attributes:
+      label: Sample Client MCP Configuration
+      description: Provide a minimal valid configuration example expected by the client.
+      render: json
+      placeholder: |
+        {
+          "mcpServers": {
+            "my-server": {
+              "command": "npx",
+              "args": ["-y", "..."]
+            }
+          }
+        }
+    validations:
+      required: true

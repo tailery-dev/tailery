@@ -27,13 +27,42 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Clippy check
-        run: cargo clippy --all-features --workspace -- -D warnings
+        run: cargo clippy --all-features --all-targets --workspace -- -D warnings
 
-  test-and-docs:
-    name: Tests & Documentation
+  security:
+    name: Security & License Audit
     runs-on: ubuntu-latest
-    env:
-      RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  msrv:
+    name: MSRV Check (1.88.0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust 1.88.0
+        uses: dtolnay/rust-toolchain@1.88.0
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check with MSRV
+        run: cargo check --locked --all-features --workspace
+
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,11 +72,27 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
-      - name: Run tests
+      - name: Run test suite
         run: cargo nextest run --locked --all-features --workspace
 
-      - name: Check documentation
+  docs:
+    name: Documentation & mdBook
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check Rustdoc
         run: cargo doc --no-deps --document-private-items --all-features --workspace
         env:
           RUSTDOCFLAGS: "-D warnings"
 
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: '0.4.37'
+
+      - name: Check mdBook build
+        run: mdbook build docs

@@ -1,5 +1,7 @@
 /target
+/dist
 .data/*.log
 .data
 .backup
 .config
+
